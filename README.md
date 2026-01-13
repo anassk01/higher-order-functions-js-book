@@ -8,6 +8,12 @@ By Anass Kabil
 
 This is a comprehensive LaTeX book project covering higher-order functions in JavaScript, from foundational concepts to advanced real-world patterns. The book is designed for web developers who want to master functional programming techniques in JavaScript.
 
+## 📥 Download the Book
+
+**[Download PDF](dist/higher-order-functions-javascript.pdf)** - Read the compiled book directly
+
+The latest built version is available in the `dist/` folder.
+
 ## 📚 Book Structure
 
 ### Part I: Foundations
