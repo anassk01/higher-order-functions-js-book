@@ -17,8 +17,9 @@
 *.run.xml
 *.listing
 
-# PDF output (uncomment if you want to track PDFs)
+# PDF output (ignore in root, but allow in dist/)
 *.pdf
+!dist/*.pdf
 
 # Temporary Claude files
 tmpclaude-*
