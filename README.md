@@ -147,7 +147,7 @@ This is an educational resource. Suggestions and corrections are welcome!
 
 ## 📄 License
 
-Copyright © 2024 Anass Kabil
+Copyright © 2026 Anass Kabil
 
 ## 🔗 Repository
 
