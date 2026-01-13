@@ -16,6 +16,9 @@
 *.bcf
 *.run.xml
 *.listing
+/_*data.minted
+/compile-main.tex
+/_minted*
 
 # PDF output (ignore in root, but allow in dist/)
 *.pdf
@@ -23,6 +26,7 @@
 
 # Temporary Claude files
 tmpclaude-*
+.claude/
 
 # OS files
 .DS_Store

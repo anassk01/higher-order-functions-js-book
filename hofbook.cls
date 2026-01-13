@@ -71,6 +71,10 @@
 \RequirePackage{tcolorbox}
 \tcbuselibrary{skins,breakable,listings}
 
+% TikZ for advanced graphics
+\RequirePackage{tikz}
+\usetikzlibrary{calc,positioning,shapes.geometric,arrows.meta,decorations.pathmorphing,backgrounds,fit,fadings}
+
 % Indexing
 \RequirePackage{imakeidx}
 
@@ -350,42 +354,190 @@
 \newcommand{\@bookrepo}{}
 
 %% ============================================================================
-%% TITLE PAGE
+%% TITLE PAGE - STUNNING VISUAL DESIGN
 %% ============================================================================
+
+% Title page colors
+\definecolor{titlebg}{HTML}{0f172a}           % Deep navy
+\definecolor{titlebg2}{HTML}{1e1b4b}          % Deep purple-navy
+\definecolor{titlegold}{HTML}{fbbf24}         % Bright gold
+\definecolor{titlecyan}{HTML}{22d3ee}         % Bright cyan
+\definecolor{titlepurple}{HTML}{a78bfa}       % Light purple
+\definecolor{titleblue}{HTML}{3b82f6}         % Bright blue
+\definecolor{codegray}{HTML}{374151}          % Code background
+
 \renewcommand{\maketitle}{%
     \begin{titlepage}
-        \centering
-        \vspace*{2cm}
+        \thispagestyle{empty}
+        \begin{tikzpicture}[remember picture, overlay]
 
-        {\Huge\bfseries\sffamily\color{hofprimary}\@title\par}
+            %% ========== BACKGROUND ==========
+            % Gradient background
+            \fill[titlebg] (current page.south west) rectangle (current page.north east);
 
-        \vspace{0.5cm}
+            % Subtle gradient overlay
+            \shade[top color=titlebg2, bottom color=titlebg, opacity=0.7]
+                (current page.south west) rectangle (current page.north east);
 
-        \ifx\@booksubtitle\empty\else
-            {\Large\sffamily\color{hofsecondary}\@booksubtitle\par}
-        \fi
+            %% ========== FLOATING CODE SNIPPETS (Background) ==========
+            % Top-right code snippet
+            \node[rotate=-12, opacity=0.08, text=white, font=\ttfamily\small, anchor=north east]
+                at ($(current page.north east) + (-1.5cm,-3cm)$) {
+                \begin{tabular}{l}
+                const compose = (...fns) =>\\
+                \quad x => fns.reduceRight(\\
+                \quad\quad (acc, fn) => fn(acc), x\\
+                \quad );
+                \end{tabular}
+            };
 
-        \vspace{2cm}
+            % Bottom-left code snippet
+            \node[rotate=8, opacity=0.06, text=white, font=\ttfamily\small, anchor=south west]
+                at ($(current page.south west) + (0.5cm,2cm)$) {
+                \begin{tabular}{l}
+                const pipe = (...fns) =>\\
+                \quad x => fns.reduce(\\
+                \quad\quad (acc, fn) => fn(acc), x\\
+                \quad );
+                \end{tabular}
+            };
 
-        % Decorative element
-        {\color{hofprimary}\rule{0.6\textwidth}{2pt}}
+            % Middle-left lambda
+            \node[opacity=0.04, text=titlegold, font=\fontsize{180}{180}\selectfont, anchor=west]
+                at ($(current page.west) + (0.5cm,2cm)$) {λ};
 
-        \vspace{2cm}
+            %% ========== GEOMETRIC DECORATIONS ==========
+            % Top decorative circles
+            \foreach \i in {1,...,5} {
+                \fill[titlecyan, opacity={0.03 + \i*0.01}]
+                    ($(current page.north west) + (2cm + \i*1.2cm, -1cm - \i*0.3cm)$)
+                    circle ({0.3cm + \i*0.15cm});
+            }
 
-        {\Large\sffamily\@author\par}
+            % Bottom decorative circles
+            \foreach \i in {1,...,4} {
+                \fill[titlepurple, opacity={0.02 + \i*0.01}]
+                    ($(current page.south east) + (-3cm - \i*1.5cm, 2cm + \i*0.5cm)$)
+                    circle ({0.4cm + \i*0.2cm});
+            }
 
-        \vfill
+            % Diagonal lines accent
+            \foreach \i in {0,...,8} {
+                \draw[titlegold, opacity=0.03, line width=0.5pt]
+                    ($(current page.north east) + (-\i*0.8cm, 0)$) --
+                    ($(current page.north east) + (-\i*0.8cm - 4cm, -4cm)$);
+            }
 
-        {\normalsize Version \@bookversion}
+            %% ========== MAIN CONTENT ==========
 
-        \vspace{0.5cm}
+            % Small "JavaScript" label at top
+            \node[anchor=north, font=\sffamily\large\bfseries, text=codegray,
+                  fill=titlegold, rounded corners=3pt, inner sep=8pt]
+                at ($(current page.north) + (0,-2cm)$) {JAVASCRIPT};
 
-        {\normalsize\@date\par}
+            % Main Title - "Higher-Order"
+            \node[anchor=south, font=\sffamily\fontsize{42}{48}\selectfont\bfseries, text=white]
+                (title1) at ($(current page.center) + (0,4.5cm)$) {Higher-Order};
 
-        \ifx\@bookrepo\empty\else
-            \vspace{0.5cm}
-            {\small\color{hofaccent}\href{\@bookrepo}{\@bookrepo}\par}
-        \fi
+            % Main Title - "Functions"
+            \node[anchor=north, font=\sffamily\fontsize{52}{58}\selectfont\bfseries, text=titlegold]
+                (title2) at ($(current page.center) + (0,4cm)$) {Functions};
+
+            % Decorative line under title
+            \draw[titlegold, line width=2pt]
+                ($(title2.south west) + (1cm,-0.3cm)$) -- ($(title2.south east) + (-1cm,-0.3cm)$);
+
+            % Subtitle
+            \node[anchor=north, font=\sffamily\Large, text=white!80]
+                (subtitle) at ($(title2.south) + (0,-1cm)$) {\@booksubtitle};
+
+            %% ========== PIPELINE VISUALIZATION ==========
+            \begin{scope}[shift={($(current page.center) + (0,-1.5cm)$)}]
+                % Pipeline background
+                \fill[codegray, rounded corners=8pt, opacity=0.6]
+                    (-6cm,-1.2cm) rectangle (6cm,1.2cm);
+
+                % Data box
+                \node[draw=titlecyan, fill=titlebg, rounded corners=4pt,
+                      minimum width=1.8cm, minimum height=0.9cm, line width=1.5pt,
+                      font=\ttfamily\small, text=titlecyan] (data) at (-4.5cm,0) {[data]};
+
+                % Arrow 1
+                \draw[-{Stealth[scale=1.2]}, titlecyan, line width=2pt]
+                    (data.east) -- ++(0.6cm,0);
+
+                % map() box
+                \node[draw=titlegold, fill=titlebg, rounded corners=4pt,
+                      minimum width=1.5cm, minimum height=0.9cm, line width=1.5pt,
+                      font=\ttfamily\small\bfseries, text=titlegold] (map) at (-2.2cm,0) {map()};
+
+                % Arrow 2
+                \draw[-{Stealth[scale=1.2]}, titlegold, line width=2pt]
+                    (map.east) -- ++(0.6cm,0);
+
+                % filter() box
+                \node[draw=titlepurple, fill=titlebg, rounded corners=4pt,
+                      minimum width=1.5cm, minimum height=0.9cm, line width=1.5pt,
+                      font=\ttfamily\small\bfseries, text=titlepurple] (filter) at (0.2cm,0) {filter()};
+
+                % Arrow 3
+                \draw[-{Stealth[scale=1.2]}, titlepurple, line width=2pt]
+                    (filter.east) -- ++(0.6cm,0);
+
+                % reduce() box
+                \node[draw=titleblue, fill=titlebg, rounded corners=4pt,
+                      minimum width=1.8cm, minimum height=0.9cm, line width=1.5pt,
+                      font=\ttfamily\small\bfseries, text=titleblue] (reduce) at (2.8cm,0) {reduce()};
+
+                % Arrow 4
+                \draw[-{Stealth[scale=1.2]}, titleblue, line width=2pt]
+                    (reduce.east) -- ++(0.6cm,0);
+
+                % Result box
+                \node[draw=white, fill=titlebg, rounded corners=4pt,
+                      minimum width=1.5cm, minimum height=0.9cm, line width=1.5pt,
+                      font=\ttfamily\small, text=white] (result) at (4.8cm,0) {result};
+            \end{scope}
+
+            %% ========== AUTHOR & INFO ==========
+            % Author name
+            \node[anchor=south, font=\sffamily\LARGE, text=white]
+                (author) at ($(current page.center) + (0,-4.5cm)$) {\@author};
+
+            % Decorative dots around author
+            \fill[titlegold] ($(author.west) + (-0.5cm,0)$) circle (3pt);
+            \fill[titlegold] ($(author.east) + (0.5cm,0)$) circle (3pt);
+
+            %% ========== BOTTOM INFO BAR ==========
+            % Version badge
+            \node[anchor=south west, font=\sffamily\small, text=white!60,
+                  fill=codegray, rounded corners=3pt, inner sep=6pt]
+                at ($(current page.south west) + (2cm,2cm)$) {v\@bookversion};
+
+            % Repository link
+            \ifx\@bookrepo\empty\else
+                \node[anchor=south, font=\ttfamily\small, text=titlecyan!80]
+                    at ($(current page.south) + (0,2cm)$) {\@bookrepo};
+            \fi
+
+            % Date
+            \node[anchor=south east, font=\sffamily\small, text=white!60]
+                at ($(current page.south east) + (-2cm,2cm)$) {\@date};
+
+            %% ========== CORNER ACCENTS ==========
+            % Top-left corner accent
+            \draw[titlegold, line width=3pt]
+                ($(current page.north west) + (1cm,-1cm)$) -- ++(2cm,0);
+            \draw[titlegold, line width=3pt]
+                ($(current page.north west) + (1cm,-1cm)$) -- ++(0,-2cm);
+
+            % Bottom-right corner accent
+            \draw[titlecyan, line width=3pt]
+                ($(current page.south east) + (-1cm,1cm)$) -- ++(-2cm,0);
+            \draw[titlecyan, line width=3pt]
+                ($(current page.south east) + (-1cm,1cm)$) -- ++(0,2cm);
+
+        \end{tikzpicture}
     \end{titlepage}
 }
 
