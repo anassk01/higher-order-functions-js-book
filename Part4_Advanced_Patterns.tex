@@ -1,0 +1,2212 @@
+%% Part4_Advanced_Patterns.tex
+%% Part IV: Advanced Patterns
+%% Compile with: lualatex --shell-escape Part4_Advanced_Patterns.tex
+%%
+\documentclass{hofbook}
+
+%% Load custom packages
+\usepackage{hofcode}
+\usepackage{hofvisual}
+
+%% ============================================================================
+%% DOCUMENT METADATA
+%% ============================================================================
+\title{Higher-Order Functions in JavaScript}
+\booksubtitle{Part IV: Advanced Patterns}
+\author{Your Name}
+\date{\today}
+\bookversion{1.0}
+
+%% ============================================================================
+%% BEGIN DOCUMENT
+%% ============================================================================
+\begin{document}
+
+%% --- Title Page ---
+\maketitle
+
+%% --- Table of Contents ---
+\frontmatter
+\tableofcontents
+
+%% ============================================================================
+%% MAIN CONTENT
+%% ============================================================================
+\mainmatter
+
+\partdivider{IV}{Advanced Patterns}
+
+% ============================================================================
+% CHAPTER 12: PERFORMANCE & OPTIMIZATION
+% ============================================================================
+\chapter{Performance \& Optimization}
+
+Higher-order functions have performance implications. This chapter teaches you when HOFs help, when they hurt, and how to optimize.
+
+\section{Understanding the Cost of HOFs}
+
+Every HOF call involves:
+
+\begin{enumerate}
+    \item \textbf{Function creation} (if inline)
+    \item \textbf{Function invocation overhead}
+    \item \textbf{Closure context allocation} (if variables captured)
+    \item \textbf{Intermediate data structures} (arrays from map/filter)
+\end{enumerate}
+
+\subsection{Measuring Performance}
+
+\begin{jscodewithtitle}{Simple Benchmark Utility}
+// Simple benchmark utility
+function benchmark(name, fn, iterations = 1000000) {
+    const start = performance.now();
+    for (let i = 0; i < iterations; i++) {
+        fn();
+    }
+    const end = performance.now();
+    console.log(`${name}: ${(end - start).toFixed(2)}ms`);
+}
+
+// Compare approaches
+const numbers = Array.from({ length: 1000 }, (_, i) => i);
+
+benchmark('for loop', () => {
+    let sum = 0;
+    for (let i = 0; i < numbers.length; i++) {
+        sum += numbers[i] * 2;
+    }
+    return sum;
+}, 10000);
+
+benchmark('forEach', () => {
+    let sum = 0;
+    numbers.forEach(n => { sum += n * 2; });
+    return sum;
+}, 10000);
+
+benchmark('reduce', () => {
+    return numbers.reduce((sum, n) => sum + n * 2, 0);
+}, 10000);
+\end{jscodewithtitle}
+
+\begin{terminal}
+Typical results (varies by engine):
+for loop: ~15ms
+forEach: ~25ms
+reduce: ~30ms
+\end{terminal}
+
+\subsection{The Reality: It Usually Doesn't Matter}
+
+For most web applications:
+
+\begin{itemize}
+    \item Arrays under 10,000 items: Use HOFs freely
+    \item Hot paths called millions of times: Consider optimization
+    \item User-facing latency: Network/DOM are bigger bottlenecks
+\end{itemize}
+
+\section{The Chain Problem}
+
+Each array method creates a new array:
+
+\begin{jscode}
+const data = Array.from({ length: 100000 }, (_, i) => i);
+
+// Creates 3 intermediate arrays!
+const result = data
+    .filter(n => n % 2 === 0)     // Array 1: 50,000 items
+    .map(n => n * 2)              // Array 2: 50,000 items
+    .filter(n => n > 1000)        // Array 3: ~49,500 items
+    .map(n => ({ value: n }));    // Array 4: ~49,500 items
+
+// Memory: 4 arrays allocated
+// Time: 4 full iterations
+\end{jscode}
+
+\subsection{Measuring Chain Overhead}
+
+\begin{jscode}
+const data = Array.from({ length: 100000 }, (_, i) => i);
+
+benchmark('Chained HOFs', () => {
+    return data
+        .filter(n => n % 2 === 0)
+        .map(n => n * 2)
+        .filter(n => n > 1000);
+}, 100);
+
+benchmark('Single reduce', () => {
+    return data.reduce((acc, n) => {
+        if (n % 2 === 0) {
+            const doubled = n * 2;
+            if (doubled > 1000) {
+                acc.push(doubled);
+            }
+        }
+        return acc;
+    }, []);
+}, 100);
+
+benchmark('For loop', () => {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+        const n = data[i];
+        if (n % 2 === 0) {
+            const doubled = n * 2;
+            if (doubled > 1000) {
+                result.push(doubled);
+            }
+        }
+    }
+    return result;
+}, 100);
+\end{jscode}
+
+\begin{terminal}
+Typical results:
+Chained HOFs: ~80ms
+Single reduce: ~30ms
+For loop: ~20ms
+\end{terminal}
+
+\section{Transducers: Single-Pass Processing}
+
+Transducers compose transformations without creating intermediate arrays.
+
+\begin{definition}{Transducer}
+A \concept{transducer} is a function that transforms a reducer. It enables composition of transformations that execute in a single pass, without creating intermediate collections.
+\end{definition}
+
+\subsection{The Concept}
+
+\begin{jscode}
+// Normal: Each step creates new array
+data.filter(isEven).map(double);  // 2 arrays, 2 passes
+
+// Transducer: Compose the operations, single pass
+transduce(compose(filter(isEven), map(double)), data);  // 1 array, 1 pass
+\end{jscode}
+
+\subsection{Building Transducers}
+
+\begin{jscodewithtitle}{Transducer Implementation}
+// A transducer is a function that transforms a reducer
+// transducer: (reducer) => reducer
+
+// Map transducer
+const map = (fn) => (reducer) => (acc, item) => {
+    return reducer(acc, fn(item));
+};
+
+// Filter transducer
+const filter = (predicate) => (reducer) => (acc, item) => {
+    return predicate(item) ? reducer(acc, item) : acc;
+};
+
+// Take transducer (with early termination)
+const take = (n) => (reducer) => {
+    let count = 0;
+    return (acc, item) => {
+        if (count >= n) return acc;
+        count++;
+        return reducer(acc, item);
+    };
+};
+
+// Compose transducers (left-to-right for data flow)
+const compose = (...fns) => x => fns.reduceRight((acc, fn) => fn(acc), x);
+
+// The final reducer (how to combine results)
+const pushReducer = (acc, item) => {
+    acc.push(item);
+    return acc;
+};
+
+// Transduce function
+const transduce = (xform, reducer, initial, data) => {
+    const transformedReducer = xform(reducer);
+    return data.reduce(transformedReducer, initial);
+};
+\end{jscodewithtitle}
+
+\subsection{Using Transducers}
+
+\begin{jscode}
+const data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Compose: filter even, double, take 3
+const xform = compose(
+    filter(n => n % 2 === 0),
+    map(n => n * 2),
+    take(3)
+);
+
+const result = transduce(xform, pushReducer, [], data);
+// [4, 8, 12]
+
+// Only processes: 1, 2, 3, 4, 5, 6 (stops after 3 results)
+// Single pass through data
+// No intermediate arrays
+\end{jscode}
+
+\begin{keyinsight}
+Transducers provide the best of both worlds: the composability of HOFs with the efficiency of imperative loops. Use them when processing large datasets with multiple transformations.
+\end{keyinsight}
+
+\subsection{Performance Comparison}
+
+\begin{jscode}
+const largeData = Array.from({ length: 1000000 }, (_, i) => i);
+
+benchmark('Array chain', () => {
+    return largeData
+        .filter(n => n % 2 === 0)
+        .map(n => n * 2)
+        .slice(0, 100);
+}, 10);
+
+benchmark('Transducer', () => {
+    const xform = compose(
+        filter(n => n % 2 === 0),
+        map(n => n * 2),
+        take(100)
+    );
+    return transduce(xform, pushReducer, [], largeData);
+}, 10);
+\end{jscode}
+
+\begin{terminal}
+Array chain: ~150ms (processes ALL 1M items)
+Transducer: ~0.5ms (stops after 200 items)
+\end{terminal}
+
+\section{Lazy Evaluation with Generators}
+
+Generators enable lazy, pull-based iteration:
+
+\begin{jscodewithtitle}{Lazy Operations with Generators}
+// Lazy map
+function* lazyMap(iterable, fn) {
+    for (const item of iterable) {
+        yield fn(item);
+    }
+}
+
+// Lazy filter
+function* lazyFilter(iterable, predicate) {
+    for (const item of iterable) {
+        if (predicate(item)) {
+            yield item;
+        }
+    }
+}
+
+// Lazy take
+function* lazyTake(iterable, n) {
+    let count = 0;
+    for (const item of iterable) {
+        if (count >= n) return;
+        yield item;
+        count++;
+    }
+}
+
+// Compose lazily
+function lazyPipe(iterable, ...operations) {
+    return operations.reduce((iter, op) => op(iter), iterable);
+}
+\end{jscodewithtitle}
+
+\subsection{Using Lazy Pipelines}
+
+\begin{jscode}
+const numbers = function* () {
+    let i = 0;
+    while (true) {
+        yield i++;
+    }
+};
+
+// Process infinite sequence lazily
+const result = lazyPipe(
+    numbers(),
+    iter => lazyFilter(iter, n => n % 2 === 0),
+    iter => lazyMap(iter, n => n * 2),
+    iter => lazyTake(iter, 5)
+);
+
+// Only compute what we need
+console.log([...result]);  // [0, 4, 8, 12, 16]
+// Only generated: 0, 1, 2, 3, 4, 5, 6, 7, 8
+\end{jscode}
+
+\subsection{Lazy Class Implementation}
+
+\begin{jscodewithtitle}{Complete Lazy Evaluation Class}
+class Lazy {
+    constructor(iterable) {
+        this.iterable = iterable;
+    }
+
+    static from(iterable) {
+        return new Lazy(iterable);
+    }
+
+    static range(start, end) {
+        return new Lazy(function* () {
+            for (let i = start; i < end; i++) {
+                yield i;
+            }
+        }());
+    }
+
+    static infinite(startFrom = 0) {
+        return new Lazy(function* () {
+            let i = startFrom;
+            while (true) yield i++;
+        }());
+    }
+
+    *[Symbol.iterator]() {
+        yield* this.iterable;
+    }
+
+    map(fn) {
+        const source = this.iterable;
+        return new Lazy(function* () {
+            for (const item of source) {
+                yield fn(item);
+            }
+        }());
+    }
+
+    filter(predicate) {
+        const source = this.iterable;
+        return new Lazy(function* () {
+            for (const item of source) {
+                if (predicate(item)) yield item;
+            }
+        }());
+    }
+
+    take(n) {
+        const source = this.iterable;
+        return new Lazy(function* () {
+            let count = 0;
+            for (const item of source) {
+                if (count >= n) return;
+                yield item;
+                count++;
+            }
+        }());
+    }
+
+    // Terminal operations
+    toArray() {
+        return [...this.iterable];
+    }
+
+    reduce(fn, initial) {
+        let acc = initial;
+        for (const item of this.iterable) {
+            acc = fn(acc, item);
+        }
+        return acc;
+    }
+}
+\end{jscodewithtitle}
+
+\begin{examplebox}{Lazy Evaluation in Action}
+\begin{jscode}
+const result = Lazy.infinite()
+    .filter(n => n % 2 === 0)
+    .map(n => n ** 2)
+    .take(10)
+    .toArray();
+
+console.log(result);
+// [0, 4, 16, 36, 64, 100, 144, 196, 256, 324]
+\end{jscode}
+\end{examplebox}
+
+\section{Iterator Helpers (ES2025)}
+
+Modern JavaScript includes native lazy iteration:
+
+\begin{jscode}
+// ES2025 Iterator Helpers
+const result = Iterator.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    .filter(n => n % 2 === 0)
+    .map(n => n * 2)
+    .take(3)
+    .toArray();
+
+// [4, 8, 12] - lazy evaluation, single pass
+\end{jscode}
+
+\begin{tip}
+Iterator Helpers are coming to JavaScript natively. They provide lazy evaluation built into the language, combining the readability of HOFs with the efficiency of generators.
+\end{tip}
+
+\subsection{Available Iterator Helpers}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.65\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Method} & \textbf{\sffamily Description} \\
+    \midrule
+    \code{map(fn)} & Transform each element \\
+    \code{filter(predicate)} & Keep elements passing predicate \\
+    \code{take(n)} & Limit to first n elements \\
+    \code{drop(n)} & Skip first n elements \\
+    \code{flatMap(fn)} & Map and flatten \\
+    \code{reduce(fn, initial)} & Fold to single value \\
+    \code{toArray()} & Collect to array \\
+    \code{forEach(fn)} & Side effects \\
+    \code{some(predicate)} & Any element passes? \\
+    \code{every(predicate)} & All elements pass? \\
+    \code{find(predicate)} & First element passing predicate \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\section{Memoization Strategies}
+
+\subsection{Basic Memoization}
+
+\begin{jscode}
+function memoize(fn) {
+    const cache = new Map();
+
+    return function (...args) {
+        const key = JSON.stringify(args);
+
+        if (cache.has(key)) {
+            return cache.get(key);
+        }
+
+        const result = fn.apply(this, args);
+        cache.set(key, result);
+        return result;
+    };
+}
+
+// Usage
+const expensiveCalculation = memoize((n) => {
+    console.log('Computing...');
+    let result = 0;
+    for (let i = 0; i < n * 1000000; i++) {
+        result += Math.sqrt(i);
+    }
+    return result;
+});
+
+expensiveCalculation(10);  // Computing... (slow)
+expensiveCalculation(10);  // (instant, cached)
+\end{jscode}
+
+\subsection{Memoization with LRU Cache}
+
+\begin{jscodewithtitle}{LRU Cache Memoization}
+function memoizeWithLRU(fn, maxSize = 100) {
+    const cache = new Map();
+
+    return function (...args) {
+        const key = JSON.stringify(args);
+
+        if (cache.has(key)) {
+            // Move to end (most recently used)
+            const value = cache.get(key);
+            cache.delete(key);
+            cache.set(key, value);
+            return value;
+        }
+
+        const result = fn.apply(this, args);
+
+        // Evict oldest if at capacity
+        if (cache.size >= maxSize) {
+            const firstKey = cache.keys().next().value;
+            cache.delete(firstKey);
+        }
+
+        cache.set(key, result);
+        return result;
+    };
+}
+\end{jscodewithtitle}
+
+\subsection{Memoization with TTL}
+
+\begin{jscode}
+function memoizeWithTTL(fn, ttlMs = 60000) {
+    const cache = new Map();
+
+    return function (...args) {
+        const key = JSON.stringify(args);
+        const now = Date.now();
+
+        if (cache.has(key)) {
+            const { value, timestamp } = cache.get(key);
+            if (now - timestamp < ttlMs) {
+                return value;
+            }
+            cache.delete(key);
+        }
+
+        const result = fn.apply(this, args);
+        cache.set(key, { value: result, timestamp: now });
+        return result;
+    };
+}
+
+// Usage
+const fetchUser = memoizeWithTTL(async (id) => {
+    const response = await fetch(`/api/users/${id}`);
+    return response.json();
+}, 30000);  // Cache for 30 seconds
+\end{jscode}
+
+\section{V8 Optimization Insights}
+
+\subsection{Monomorphism: Keep Types Consistent}
+
+\begin{codebad}
+// BAD: Polymorphic (mixed types) - slow
+function processItems(items) {
+    return items.map(item => item.value * 2);
+}
+
+processItems([{ value: 1 }, { value: 2 }]);  // Objects
+processItems([1, 2, 3]);                      // Numbers - different type!
+// V8 can't optimize - must handle multiple types
+\end{codebad}
+
+\begin{codegood}
+// GOOD: Monomorphic (consistent types) - fast
+function processObjects(items) {
+    return items.map(item => item.value * 2);
+}
+
+function processNumbers(items) {
+    return items.map(n => n * 2);
+}
+// V8 optimizes each function for its specific type
+\end{codegood}
+
+\subsection{Hidden Classes: Consistent Object Shapes}
+
+\begin{codebad}
+// BAD: Different property orders = different hidden classes
+const user1 = { name: 'Alice', age: 30 };
+const user2 = { age: 25, name: 'Bob' };  // Different order!
+
+// BAD: Adding properties later
+const user3 = { name: 'Charlie' };
+user3.age = 35;  // Added later - new hidden class
+\end{codebad}
+
+\begin{codegood}
+// GOOD: Same shape, same order
+function createUser(name, age) {
+    return { name, age };  // Always same shape
+}
+
+const users = [
+    createUser('Alice', 30),
+    createUser('Bob', 25),
+    createUser('Charlie', 35)
+];
+// All share same hidden class - fast property access
+\end{codegood}
+
+\section{Performance Decision Matrix}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.35\textwidth} >{\raggedright\arraybackslash}p{0.55\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Scenario} & \textbf{\sffamily Recommendation} \\
+    \midrule
+    < 1,000 items & Use array methods freely \\
+    1,000 - 10,000 items & Array methods OK, profile if slow \\
+    10,000 - 100,000 items & Consider single reduce or transducers \\
+    > 100,000 items & Use lazy evaluation or for loops \\
+    Hot path (called 1000s/sec) & Benchmark, consider for loop \\
+    Infinite/streaming data & Use generators or async iterators \\
+    Heavy computation per item & Memoize the transformation \\
+    Need early exit & Use find/some/every or lazy \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Quick Optimization Checklist}
+
+\begin{jscode}
+// 1. Combine filters
+// Instead of:
+data.filter(a).filter(b).filter(c)
+// Use:
+data.filter(x => a(x) && b(x) && c(x))
+
+// 2. Combine map operations
+// Instead of:
+data.map(a).map(b).map(c)
+// Use:
+data.map(x => c(b(a(x))))
+
+// 3. Filter before map (reduce items early)
+// Instead of:
+data.map(transform).filter(predicate)
+// Use:
+data.filter(predicate).map(transform)
+
+// 4. Use appropriate method
+// Instead of:
+data.filter(predicate).length > 0
+// Use:
+data.some(predicate)
+
+// Instead of:
+data.filter(predicate)[0]
+// Use:
+data.find(predicate)
+\end{jscode}
+
+\section{Practice Exercises}
+
+\begin{exercise}{12.1: Transducer Implementation}
+Complete the transducer implementation with \code{flatMap} and \code{takeWhile}:
+
+\begin{exercisecode}
+const flatMap = (fn) => (reducer) => (acc, item) => {
+    // Your code here
+};
+
+const takeWhile = (predicate) => (reducer) => {
+    // Your code here - stop when predicate returns false
+};
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{12.2: Lazy Pipeline}
+Create a lazy pipeline that processes a large CSV file line by line:
+
+\begin{exercisecode}
+function processCSV(lines) {
+    // Return lazy pipeline that:
+    // 1. Skips header
+    // 2. Parses each line to object
+    // 3. Filters by condition
+    // 4. Transforms data
+    // 5. Takes first N results
+}
+\end{exercisecode}
+\end{exercise}
+
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+    Array methods & Small data, readability priority \\
+    Single reduce & Medium data, avoid intermediates \\
+    Transducers & Large data, composable transforms \\
+    Generators/Lazy & Infinite/streaming, early exit \\
+    Iterator Helpers & Modern JS, native lazy eval \\
+    Memoization & Expensive pure functions \\
+    For loops & Maximum performance critical paths \\
+}
+
+\begin{keyinsight}
+Optimize based on data, not dogma. Measure first, optimize where it matters, and prefer readability for non-critical paths.
+\end{keyinsight}
+\end{chaptersummary}
+
+% ============================================================================
+% CHAPTER 13: FUNCTIONAL ERROR HANDLING
+% ============================================================================
+\chapter{Functional Error Handling}
+
+Traditional try/catch breaks function composition. Functional error handling keeps your pipelines clean and errors explicit.
+
+\section{The Problem with Exceptions}
+
+Exceptions break composition:
+
+\begin{jscode}
+// This pipeline can break at any point
+const result = data
+    .map(parse)      // Might throw!
+    .filter(validate) // Might throw!
+    .map(transform);  // Might throw!
+
+// You're forced to wrap everything
+try {
+    const result = data
+        .map(parse)
+        .filter(validate)
+        .map(transform);
+} catch (error) {
+    // Which step failed? What data caused it?
+    // Hard to know without complex error handling
+}
+\end{jscode}
+
+\begin{warning}
+Exceptions are hidden side effects. A function that throws doesn't declare it in its type signature, making errors invisible until runtime.
+\end{warning}
+
+\subsection{Exceptions Are Side Effects}
+
+\begin{jscode}
+// This function lies about its return type
+function divide(a, b) {
+    if (b === 0) throw new Error('Division by zero');
+    return a / b;
+}
+
+// Type says: (number, number) => number
+// Reality: (number, number) => number | throws
+\end{jscode}
+
+\section{The Either Pattern}
+
+\begin{definition}{Either}
+Either represents a value that can be one of two types:
+\begin{itemize}
+    \item \textbf{Right}: Success (the ``right'' path)
+    \item \textbf{Left}: Failure (the ``wrong'' path)
+\end{itemize}
+\end{definition}
+
+\begin{jscodewithtitle}{Either Implementation}
+// Either implementation
+const Right = (value) => ({
+    map: (fn) => Right(fn(value)),
+    flatMap: (fn) => fn(value),
+    fold: (onLeft, onRight) => onRight(value),
+    isRight: true,
+    isLeft: false,
+    value
+});
+
+const Left = (value) => ({
+    map: (fn) => Left(value),  // Don't apply fn, pass through error
+    flatMap: (fn) => Left(value),
+    fold: (onLeft, onRight) => onLeft(value),
+    isRight: false,
+    isLeft: true,
+    value
+});
+
+// Helper to wrap potentially throwing functions
+const tryCatch = (fn) => {
+    try {
+        return Right(fn());
+    } catch (error) {
+        return Left(error);
+    }
+};
+\end{jscodewithtitle}
+
+\subsection{Using Either}
+
+\begin{jscode}
+// Safe division
+const divide = (a, b) =>
+    b === 0
+        ? Left(new Error('Division by zero'))
+        : Right(a / b);
+
+// Chain operations safely
+const result = divide(10, 2)        // Right(5)
+    .map(n => n * 2)                 // Right(10)
+    .map(n => n + 1)                 // Right(11)
+    .fold(
+        error => `Error: ${error.message}`,
+        value => `Result: ${value}`
+    );
+
+// "Result: 11"
+
+// With error
+const errorResult = divide(10, 0)   // Left(Error)
+    .map(n => n * 2)                 // Left(Error) - skipped
+    .map(n => n + 1)                 // Left(Error) - skipped
+    .fold(
+        error => `Error: ${error.message}`,
+        value => `Result: ${value}`
+    );
+
+// "Error: Division by zero"
+\end{jscode}
+
+\section{Railway Oriented Programming}
+
+Think of your pipeline as a railway with two tracks:
+
+\begin{itemize}
+    \item \textbf{Success track}: Data flows through transformations
+    \item \textbf{Failure track}: Errors bypass transformations
+\end{itemize}
+
+\begin{asciibox}
+Success: ──────[fn1]──────[fn2]──────[fn3]──────> Result
+                 │           │           │
+Failure: ────────┴───────────┴───────────┴──────> Error
+\end{asciibox}
+
+\begin{jscodewithtitle}{Railway Validation Pipeline}
+// Each function is a "switch" that can derail to error track
+const validateEmail = (data) =>
+    data.email?.includes('@')
+        ? Right(data)
+        : Left({ field: 'email', message: 'Invalid email' });
+
+const validatePassword = (data) =>
+    data.password?.length >= 8
+        ? Right(data)
+        : Left({ field: 'password', message: 'Password too short' });
+
+const validateAge = (data) =>
+    data.age >= 18
+        ? Right(data)
+        : Left({ field: 'age', message: 'Must be 18 or older' });
+
+// Railway pipeline
+const validateUser = (data) =>
+    Right(data)
+        .flatMap(validateEmail)
+        .flatMap(validatePassword)
+        .flatMap(validateAge);
+\end{jscodewithtitle}
+
+\begin{examplebox}{Railway in Action}
+\begin{jscode}
+validateUser({
+    email: 'test@example.com',
+    password: 'securepass123',
+    age: 25
+});
+// Right({ email: 'test@example.com', ... })
+
+validateUser({ email: 'invalid', password: 'short', age: 16 });
+// Left({ field: 'email', message: 'Invalid email' })
+// Stops at first error
+\end{jscode}
+\end{examplebox}
+
+\section{Collecting All Errors}
+
+Sometimes you want all errors, not just the first:
+
+\begin{jscodewithtitle}{Validation That Collects Errors}
+// Validation that collects all errors
+const Validation = {
+    Success: (value) => ({
+        map: (fn) => Validation.Success(fn(value)),
+        flatMap: (fn) => fn(value),
+        fold: (onFailure, onSuccess) => onSuccess(value),
+        concat: (other) => other,
+        isSuccess: true,
+        value
+    }),
+
+    Failure: (errors) => ({
+        map: (fn) => Validation.Failure(errors),
+        flatMap: (fn) => Validation.Failure(errors),
+        fold: (onFailure, onSuccess) => onFailure(errors),
+        concat: (other) => other.isSuccess
+            ? Validation.Failure(errors)
+            : Validation.Failure([...errors, ...other.value]),
+        isSuccess: false,
+        value: errors
+    })
+};
+
+// Validators return Validation
+const validateEmail = (email) =>
+    email?.includes('@')
+        ? Validation.Success(email)
+        : Validation.Failure([{ field: 'email', message: 'Invalid email' }]);
+
+const validatePassword = (password) =>
+    password?.length >= 8
+        ? Validation.Success(password)
+        : Validation.Failure([{ field: 'password', message: 'Password too short' }]);
+\end{jscodewithtitle}
+
+\section{Maybe/Option Pattern}
+
+For values that might not exist:
+
+\begin{jscodewithtitle}{Maybe Implementation}
+const Maybe = {
+    Just: (value) => ({
+        map: (fn) => Maybe.Just(fn(value)),
+        flatMap: (fn) => fn(value),
+        getOrElse: (defaultValue) => value,
+        filter: (predicate) => predicate(value)
+            ? Maybe.Just(value)
+            : Maybe.Nothing(),
+        fold: (onNothing, onJust) => onJust(value),
+        isJust: true,
+        isNothing: false,
+        value
+    }),
+
+    Nothing: () => ({
+        map: (fn) => Maybe.Nothing(),
+        flatMap: (fn) => Maybe.Nothing(),
+        getOrElse: (defaultValue) => defaultValue,
+        filter: (predicate) => Maybe.Nothing(),
+        fold: (onNothing, onJust) => onNothing(),
+        isJust: false,
+        isNothing: true,
+        value: null
+    }),
+
+    fromNullable: (value) =>
+        value == null ? Maybe.Nothing() : Maybe.Just(value)
+};
+\end{jscodewithtitle}
+
+\subsection{Safe Property Access}
+
+\begin{jscode}
+// Safe property access
+const prop = (key) => (obj) => Maybe.fromNullable(obj[key]);
+
+const user = {
+    name: 'Alice',
+    address: {
+        city: 'New York'
+    }
+};
+
+// Safe nested access
+const getCity = (user) =>
+    Maybe.fromNullable(user)
+        .flatMap(prop('address'))
+        .flatMap(prop('city'))
+        .getOrElse('Unknown');
+
+getCity(user);                    // 'New York'
+getCity({ name: 'Bob' });         // 'Unknown'
+getCity(null);                    // 'Unknown'
+\end{jscode}
+
+\section{Result Type (Rust-Inspired)}
+
+A more explicit Either with Ok/Err:
+
+\begin{jscodewithtitle}{Result Type Implementation}
+const Result = {
+    Ok: (value) => ({
+        map: (fn) => Result.Ok(fn(value)),
+        mapErr: (fn) => Result.Ok(value),
+        flatMap: (fn) => fn(value),
+        unwrap: () => value,
+        unwrapOr: (defaultValue) => value,
+        match: ({ ok, err }) => ok(value),
+        isOk: true,
+        isErr: false,
+        value
+    }),
+
+    Err: (error) => ({
+        map: (fn) => Result.Err(error),
+        mapErr: (fn) => Result.Err(fn(error)),
+        flatMap: (fn) => Result.Err(error),
+        unwrap: () => { throw error; },
+        unwrapOr: (defaultValue) => defaultValue,
+        match: ({ ok, err }) => err(error),
+        isOk: false,
+        isErr: true,
+        error
+    }),
+
+    fromThrowable: (fn) => (...args) => {
+        try {
+            return Result.Ok(fn(...args));
+        } catch (error) {
+            return Result.Err(error);
+        }
+    }
+};
+\end{jscodewithtitle}
+
+\begin{examplebox}{Result Type in Action}
+\begin{jscode}
+const parseJSON = Result.fromThrowable(JSON.parse);
+
+parseJSON('{"name": "Alice"}')
+    .map(data => data.name)
+    .map(name => name.toUpperCase())
+    .match({
+        ok: name => console.log(`Hello, ${name}!`),
+        err: error => console.error(`Parse error: ${error.message}`)
+    });
+\end{jscode}
+\end{examplebox}
+
+\section{Async Either (TaskEither)}
+
+Combining Either with Promises:
+
+\begin{jscodewithtitle}{TaskEither for Async Operations}
+const TaskEither = {
+    tryCatch: (asyncFn) => {
+        const promise = asyncFn()
+            .then(value => ({ isRight: true, value }))
+            .catch(error => ({ isRight: false, error }));
+
+        return {
+            map: (fn) => TaskEither.tryCatch(async () => {
+                const result = await promise;
+                if (result.isRight) return fn(result.value);
+                throw result.error;
+            }),
+
+            flatMap: (fn) => TaskEither.tryCatch(async () => {
+                const result = await promise;
+                if (result.isRight) return fn(result.value).run();
+                throw result.error;
+            }),
+
+            fold: async (onLeft, onRight) => {
+                const result = await promise;
+                return result.isRight
+                    ? onRight(result.value)
+                    : onLeft(result.error);
+            },
+
+            run: async () => {
+                const result = await promise;
+                if (result.isRight) return result.value;
+                throw result.error;
+            }
+        };
+    }
+};
+\end{jscodewithtitle}
+
+\begin{examplebox}{Async Error Handling}
+\begin{jscode}
+const fetchUser = (id) => TaskEither.tryCatch(
+    () => fetch(`/api/users/${id}`).then(r => r.json())
+);
+
+const result = await fetchUser(123)
+    .map(user => user.name)
+    .map(name => name.toUpperCase())
+    .fold(
+        error => `Error: ${error.message}`,
+        name => `Hello, ${name}!`
+    );
+\end{jscode}
+\end{examplebox}
+
+\section{Practice Exercises}
+
+\begin{exercise}{13.1: Either Implementation}
+Complete the Either implementation with these additional methods:
+
+\begin{exercisecode}
+// Add to Right/Left:
+// - orElse(fn): if Left, run fn to get new Either
+// - tap(fn): run side effect without changing value
+// - toMaybe(): convert to Maybe
+// - swap(): swap Right/Left
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{13.2: Validation Pipeline}
+Create a user registration validation that collects all errors:
+
+\begin{exercisecode}
+const validateRegistration = (data) => {
+    // Validate: email, password, confirmPassword, age, terms
+    // Return all errors, not just the first
+};
+\end{exercisecode}
+\end{exercise}
+
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.2\textwidth} >{\raggedright\arraybackslash}p{0.3\textwidth} >{\raggedright\arraybackslash}p{0.4\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Type} & \textbf{\sffamily Purpose} & \textbf{\sffamily Use When} \\
+    \midrule
+    Either & Success or Failure & Operations that can fail \\
+    Maybe & Value or Nothing & Optional values, null safety \\
+    Validation & Collect all errors & Form validation \\
+    Result & Ok or Err & Explicit error handling \\
+    TaskEither & Async Either & Async operations that can fail \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyinsight}
+Make errors part of your type system, not hidden exceptions. This makes error handling explicit, composable, and impossible to forget.
+\end{keyinsight}
+\end{chaptersummary}
+
+% ============================================================================
+% CHAPTER 14: WORKING WITH COMPLEX DATA
+% ============================================================================
+\chapter{Working with Complex Data}
+
+Lenses and optics provide composable tools for working with nested, immutable data structures.
+
+\section{The Problem with Deep Updates}
+
+Updating nested immutable data is verbose:
+
+\begin{codebad}
+const state = {
+    user: {
+        profile: {
+            address: {
+                city: 'New York'
+            }
+        }
+    }
+};
+
+// Update city - ugly!
+const newState = {
+    ...state,
+    user: {
+        ...state.user,
+        profile: {
+            ...state.user.profile,
+            address: {
+                ...state.user.profile.address,
+                city: 'Los Angeles'
+            }
+        }
+    }
+};
+\end{codebad}
+
+\section{What is a Lens?}
+
+\begin{definition}{Lens}
+A \concept{lens} is a pair of functions:
+\begin{itemize}
+    \item \textbf{get}: Extract a value from a structure
+    \item \textbf{set}: Return a new structure with a value changed
+\end{itemize}
+Lenses are composable, allowing you to focus on deeply nested values.
+\end{definition}
+
+\begin{jscodewithtitle}{Simple Lens Implementation}
+// Simple lens implementation
+const lens = (getter, setter) => ({
+    get: getter,
+    set: setter,
+
+    // Modify using a function
+    over: (fn) => (obj) => setter(fn(getter(obj)), obj),
+
+    // Compose with another lens
+    compose: (other) => lens(
+        (obj) => other.get(getter(obj)),
+        (value, obj) => setter(other.set(value, getter(obj)), obj)
+    )
+});
+
+// Create a lens for a property
+const prop = (key) => lens(
+    (obj) => obj[key],
+    (value, obj) => ({ ...obj, [key]: value })
+);
+\end{jscodewithtitle}
+
+\subsection{Using Lenses}
+
+\begin{jscode}
+const nameLens = prop('name');
+const addressLens = prop('address');
+const cityLens = prop('city');
+
+const user = {
+    name: 'Alice',
+    address: { city: 'NYC', zip: '10001' }
+};
+
+// Get
+nameLens.get(user);  // 'Alice'
+
+// Set
+nameLens.set('Bob', user);
+// { name: 'Bob', address: { ... } }
+
+// Over (modify with function)
+nameLens.over(s => s.toUpperCase())(user);
+// { name: 'ALICE', ... }
+\end{jscode}
+
+\subsection{Composing Lenses}
+
+\begin{jscode}
+// Compose to access nested properties
+const userCityLens = addressLens.compose(cityLens);
+
+userCityLens.get(user);  // 'NYC'
+userCityLens.set('LA', user);
+// { name: 'Alice', address: { city: 'LA', zip: '10001' } }
+\end{jscode}
+
+\begin{keyinsight}
+Lenses turn nested updates into simple, declarative operations. Build small lenses, compose them for deep access, and your state updates become clear and reusable.
+\end{keyinsight}
+
+\section{Lens Utilities}
+
+\begin{jscode}
+// Lens for array index
+const index = (i) => lens(
+    (arr) => arr[i],
+    (value, arr) => {
+        const copy = [...arr];
+        copy[i] = value;
+        return copy;
+    }
+);
+
+// Lens for nested path
+const path = (...keys) => keys.map(prop).reduce((a, b) => a.compose(b));
+
+// Usage
+const state = {
+    users: [
+        { name: 'Alice', scores: [85, 90, 78] },
+        { name: 'Bob', scores: [92, 88, 95] }
+    ]
+};
+
+const firstUserLens = prop('users').compose(index(0));
+const firstUserNameLens = firstUserLens.compose(prop('name'));
+const firstUserFirstScoreLens = firstUserLens
+    .compose(prop('scores'))
+    .compose(index(0));
+
+firstUserNameLens.get(state);  // 'Alice'
+firstUserFirstScoreLens.set(100, state);
+// Updates Alice's first score to 100
+\end{jscode}
+
+\section{Prisms: For Optional/Union Types}
+
+Prisms handle values that might not exist:
+
+\begin{jscodewithtitle}{Prism Implementation}
+const prism = (getOption, reverseGet) => ({
+    getOption,  // Returns Maybe
+    reverseGet, // Constructs the whole from the part
+
+    modify: (fn) => (whole) => {
+        const part = getOption(whole);
+        return part.isJust
+            ? reverseGet(fn(part.value))
+            : whole;
+    }
+});
+
+// Prism for array head
+const headPrism = prism(
+    (arr) => arr.length > 0 ? Maybe.Just(arr[0]) : Maybe.Nothing(),
+    (value) => [value]
+);
+
+// Prism for specific type in union
+const stringPrism = prism(
+    (value) => typeof value === 'string'
+        ? Maybe.Just(value)
+        : Maybe.Nothing(),
+    (value) => value
+);
+\end{jscodewithtitle}
+
+\section{Traversals: For Multiple Focuses}
+
+Traversals work with multiple values at once:
+
+\begin{jscode}
+// Traversal over array elements
+const each = {
+    over: (fn) => (arr) => arr.map(fn),
+    get: (arr) => arr,  // Gets all elements
+    set: (value) => (arr) => arr.map(() => value)
+};
+
+// Compose lens with traversal
+const state = {
+    users: [
+        { name: 'Alice', active: true },
+        { name: 'Bob', active: false },
+        { name: 'Charlie', active: true }
+    ]
+};
+
+// Update all user names to uppercase
+const usersLens = prop('users');
+const updateAllNames = (state) =>
+    usersLens.over(users =>
+        each.over(user =>
+            prop('name').over(s => s.toUpperCase())(user)
+        )(users)
+    )(state);
+\end{jscode}
+
+\section{Practical Lens Patterns}
+
+\subsection{Pattern 1: Redux-Style State Updates}
+
+\begin{jscodewithtitle}{Lenses for Redux}
+// Lenses for different parts of state
+const todosLens = prop('todos');
+const filterLens = prop('filter');
+const todoByIdLens = (id) => todosLens.compose(
+    lens(
+        (todos) => todos.find(t => t.id === id),
+        (todo, todos) => todos.map(t => t.id === id ? todo : t)
+    )
+);
+
+// Actions using lenses
+const addTodo = (todo) => todosLens.over(todos => [...todos, todo]);
+const toggleTodo = (id) => todoByIdLens(id).over(todo => ({
+    ...todo,
+    completed: !todo.completed
+}));
+const setFilter = (filter) => filterLens.set(filter);
+\end{jscodewithtitle}
+
+\subsection{Pattern 2: Form State Management}
+
+\begin{jscode}
+const formLens = prop('form');
+const fieldLens = (name) => formLens.compose(prop(name));
+const valueLens = (name) => fieldLens(name).compose(prop('value'));
+const errorLens = (name) => fieldLens(name).compose(prop('error'));
+const touchedLens = (name) => fieldLens(name).compose(prop('touched'));
+
+// Form actions
+const setValue = (name, value) => valueLens(name).set(value);
+const setError = (name, error) => errorLens(name).set(error);
+const setTouched = (name) => touchedLens(name).set(true);
+\end{jscode}
+
+\section{Immer as a Lens Alternative}
+
+Immer provides a simpler API for the same goal:
+
+\begin{comparison}
+\begin{minipage}{0.48\textwidth}
+\textbf{With Lenses}
+\begin{jscode}
+const cityLens = path(
+    'user',
+    'profile',
+    'address',
+    'city'
+);
+
+const newState =
+    cityLens.set(
+        'LA',
+        state
+    );
+\end{jscode}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\textbf{With Immer}
+\begin{jscode}
+const newState =
+    produce(state, draft => {
+        draft.user
+            .profile
+            .address
+            .city = 'LA';
+    });
+\end{jscode}
+\end{minipage}
+\end{comparison}
+
+\subsection{When to Use Lenses vs Immer}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.45\textwidth} >{\raggedright\arraybackslash}p{0.45\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Lenses} & \textbf{\sffamily Immer} \\
+    \midrule
+    Composable, reusable accessors & One-off updates \\
+    Type-safe (with TS) & Simple syntax \\
+    No runtime dependency & Requires library \\
+    Functional style & Mutable-style syntax \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\section{Practice Exercises}
+
+\begin{exercise}{14.1: Lens Implementation}
+Complete the lens implementation with these features:
+
+\begin{exercisecode}
+const lens = (getter, setter) => ({
+    get: getter,
+    set: setter,
+    over: (fn) => (obj) => // Your code,
+    compose: (other) => // Your code,
+
+    // Add these:
+    // view: alias for get
+    // modify: alias for over
+    // toMaybe: get as Maybe (for optional values)
+});
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{14.2: Array Lenses}
+Create lenses for array operations:
+
+\begin{exercisecode}
+const arrayLenses = {
+    // Focus on element at index
+    at: (index) => // lens,
+
+    // Focus on first element
+    head: // lens,
+
+    // Focus on last element
+    last: // lens,
+
+    // Focus on elements matching predicate
+    where: (predicate) => // traversal-like
+};
+\end{exercisecode}
+\end{exercise}
+
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.2\textwidth} >{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.45\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Optic} & \textbf{\sffamily Focus} & \textbf{\sffamily Use Case} \\
+    \midrule
+    Lens & Exactly one value & Property access/update \\
+    Prism & Zero or one value & Optional values, union types \\
+    Traversal & Zero or more values & Collections, multiple targets \\
+    Iso & Bidirectional transform & Type conversions \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyinsight}
+Lenses make immutable updates composable. Build small lenses, compose them for deep access, and your state updates become declarative and reusable.
+\end{keyinsight}
+\end{chaptersummary}
+
+% ============================================================================
+% CHAPTER 15: METAPROGRAMMING WITH PROXIES + HOFs
+% ============================================================================
+\chapter{Metaprogramming with Proxies + HOFs}
+
+Combining Proxies with higher-order functions enables powerful metaprogramming patterns.
+
+\section{Proxy Fundamentals}
+
+Proxy intercepts operations on objects:
+
+\begin{jscode}
+const target = { name: 'Alice', age: 30 };
+
+const handler = {
+    get(target, prop, receiver) {
+        console.log(`Getting ${prop}`);
+        return Reflect.get(target, prop, receiver);
+    },
+
+    set(target, prop, value, receiver) {
+        console.log(`Setting ${prop} to ${value}`);
+        return Reflect.set(target, prop, value, receiver);
+    }
+};
+
+const proxy = new Proxy(target, handler);
+
+proxy.name;        // Logs: "Getting name", returns "Alice"
+proxy.age = 31;    // Logs: "Setting age to 31"
+\end{jscode}
+
+\section{HOF-Based Proxy Factories}
+
+\subsection{Observable Objects}
+
+\begin{jscodewithtitle}{Observable Proxy Factory}
+function observable(target, onChange) {
+    return new Proxy(target, {
+        set(target, prop, value, receiver) {
+            const oldValue = target[prop];
+            const result = Reflect.set(target, prop, value, receiver);
+
+            if (oldValue !== value) {
+                onChange(prop, value, oldValue);
+            }
+
+            return result;
+        },
+
+        deleteProperty(target, prop) {
+            const oldValue = target[prop];
+            const result = Reflect.deleteProperty(target, prop);
+
+            if (result) {
+                onChange(prop, undefined, oldValue);
+            }
+
+            return result;
+        }
+    });
+}
+
+// Usage
+const state = observable({ count: 0 }, (prop, newVal, oldVal) => {
+    console.log(`${prop} changed from ${oldVal} to ${newVal}`);
+});
+
+state.count++;  // "count changed from 0 to 1"
+\end{jscodewithtitle}
+
+\subsection{Deep Observable}
+
+\begin{jscodewithtitle}{Deep Observable with Nested Tracking}
+function deepObservable(target, onChange, path = []) {
+    if (typeof target !== 'object' || target === null) {
+        return target;
+    }
+
+    // Recursively wrap nested objects
+    for (const key of Object.keys(target)) {
+        if (typeof target[key] === 'object' && target[key] !== null) {
+            target[key] = deepObservable(
+                target[key],
+                onChange,
+                [...path, key]
+            );
+        }
+    }
+
+    return new Proxy(target, {
+        set(target, prop, value, receiver) {
+            const fullPath = [...path, prop].join('.');
+            const oldValue = target[prop];
+
+            // Wrap new objects
+            if (typeof value === 'object' && value !== null) {
+                value = deepObservable(value, onChange, [...path, prop]);
+            }
+
+            const result = Reflect.set(target, prop, value, receiver);
+
+            if (oldValue !== value) {
+                onChange(fullPath, value, oldValue);
+            }
+
+            return result;
+        }
+    });
+}
+\end{jscodewithtitle}
+
+\begin{examplebox}{Deep Observable in Action}
+\begin{jscode}
+const state = deepObservable({
+    user: { profile: { name: 'Alice' } }
+}, (path, newVal, oldVal) => {
+    console.log(`${path}: ${oldVal} -> ${newVal}`);
+});
+
+state.user.profile.name = 'Bob';
+// "user.profile.name: Alice -> Bob"
+\end{jscode}
+\end{examplebox}
+
+\section{Validation Proxy}
+
+\begin{jscodewithtitle}{Type Validation Proxy}
+function validated(target, schema) {
+    return new Proxy(target, {
+        set(target, prop, value, receiver) {
+            const validator = schema[prop];
+
+            if (validator) {
+                const result = validator(value);
+                if (!result.valid) {
+                    throw new TypeError(
+                        `Invalid value for ${prop}: ${result.error}`
+                    );
+                }
+            }
+
+            return Reflect.set(target, prop, value, receiver);
+        }
+    });
+}
+
+// Validation helpers (HOFs)
+const isType = (type) => (value) => ({
+    valid: typeof value === type,
+    error: `Expected ${type}, got ${typeof value}`
+});
+
+const inRange = (min, max) => (value) => ({
+    valid: value >= min && value <= max,
+    error: `Must be between ${min} and ${max}`
+});
+
+const matches = (regex) => (value) => ({
+    valid: regex.test(value),
+    error: `Must match pattern ${regex}`
+});
+
+// Compose validators
+const and = (...validators) => (value) => {
+    for (const v of validators) {
+        const result = v(value);
+        if (!result.valid) return result;
+    }
+    return { valid: true };
+};
+\end{jscodewithtitle}
+
+\begin{examplebox}{Validated Object Usage}
+\begin{jscode}
+const user = validated({}, {
+    name: and(isType('string'), (v) => ({
+        valid: v.length >= 2,
+        error: 'Name must be at least 2 characters'
+    })),
+    age: and(isType('number'), inRange(0, 150)),
+    email: and(isType('string'), matches(/^[^@]+@[^@]+\.[^@]+$/))
+});
+
+user.name = 'Alice';  // OK
+user.age = 30;        // OK
+user.age = -5;        // Throws: "Invalid value for age: Must be between 0 and 150"
+\end{jscode}
+\end{examplebox}
+
+\section{Lazy Initialization}
+
+\begin{jscode}
+function lazy(initializer) {
+    let instance = null;
+    let initialized = false;
+
+    return new Proxy({}, {
+        get(target, prop, receiver) {
+            if (!initialized) {
+                instance = initializer();
+                initialized = true;
+            }
+            return Reflect.get(instance, prop, instance);
+        },
+
+        set(target, prop, value, receiver) {
+            if (!initialized) {
+                instance = initializer();
+                initialized = true;
+            }
+            return Reflect.set(instance, prop, value, instance);
+        }
+    });
+}
+
+// Usage
+const expensiveService = lazy(() => {
+    console.log('Initializing expensive service...');
+    return {
+        process: (data) => data.toUpperCase(),
+        config: { timeout: 5000 }
+    };
+});
+
+// Nothing happens yet
+console.log('Service created');
+
+// Now it initializes
+expensiveService.process('hello');
+// Logs: "Initializing expensive service..."
+\end{jscode}
+
+\section{Method Chaining Proxy}
+
+\begin{jscodewithtitle}{Auto-Chainable Methods}
+function chainable(target) {
+    return new Proxy(target, {
+        get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver);
+
+            if (typeof value === 'function') {
+                return function (...args) {
+                    const result = value.apply(target, args);
+                    // If method returns undefined, return proxy for chaining
+                    return result === undefined ? receiver : result;
+                };
+            }
+
+            return value;
+        }
+    });
+}
+
+// Usage
+class Builder {
+    constructor() {
+        this.config = {};
+    }
+
+    setName(name) {
+        this.config.name = name;
+        // No return - would normally break chaining
+    }
+
+    setAge(age) {
+        this.config.age = age;
+    }
+
+    build() {
+        return { ...this.config };
+    }
+}
+
+const builder = chainable(new Builder());
+
+const result = builder
+    .setName('Alice')  // Returns proxy, not undefined
+    .setAge(30)        // Returns proxy, not undefined
+    .build();          // Returns actual result
+
+console.log(result);  // { name: 'Alice', age: 30 }
+\end{jscodewithtitle}
+
+\section{Negative Array Indices}
+
+\begin{jscode}
+function negativeArray(arr) {
+    return new Proxy(arr, {
+        get(target, prop, receiver) {
+            const index = Number(prop);
+
+            if (Number.isInteger(index) && index < 0) {
+                return target[target.length + index];
+            }
+
+            return Reflect.get(target, prop, receiver);
+        },
+
+        set(target, prop, value, receiver) {
+            const index = Number(prop);
+
+            if (Number.isInteger(index) && index < 0) {
+                target[target.length + index] = value;
+                return true;
+            }
+
+            return Reflect.set(target, prop, value, receiver);
+        }
+    });
+}
+
+// Usage
+const arr = negativeArray([1, 2, 3, 4, 5]);
+
+arr[-1];  // 5 (last element)
+arr[-2];  // 4 (second to last)
+arr[-1] = 10;
+console.log(arr);  // [1, 2, 3, 4, 10]
+\end{jscode}
+
+\section{Immutable Proxy}
+
+\begin{jscodewithtitle}{Deep Immutable Proxy}
+function immutable(target, deep = true) {
+    if (typeof target !== 'object' || target === null) {
+        return target;
+    }
+
+    // Deep freeze nested objects
+    if (deep) {
+        for (const key of Object.keys(target)) {
+            if (typeof target[key] === 'object') {
+                target[key] = immutable(target[key], true);
+            }
+        }
+    }
+
+    return new Proxy(target, {
+        set(target, prop, value) {
+            throw new TypeError(
+                `Cannot modify immutable property: ${prop}`
+            );
+        },
+
+        deleteProperty(target, prop) {
+            throw new TypeError(
+                `Cannot delete immutable property: ${prop}`
+            );
+        },
+
+        defineProperty(target, prop, descriptor) {
+            throw new TypeError(
+                `Cannot define property on immutable object: ${prop}`
+            );
+        }
+    });
+}
+\end{jscodewithtitle}
+
+\section{Method Interception (AOP)}
+
+\begin{jscodewithtitle}{Aspect-Oriented Programming with Proxies}
+function intercept(target, interceptors) {
+    return new Proxy(target, {
+        get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver);
+
+            if (typeof value !== 'function') {
+                return value;
+            }
+
+            const { before, after, around } = interceptors[prop] || {};
+
+            return function (...args) {
+                // Before advice
+                if (before) {
+                    before.call(this, args);
+                }
+
+                let result;
+
+                // Around advice (or original)
+                if (around) {
+                    result = around.call(
+                        this,
+                        () => value.apply(this, args),
+                        args
+                    );
+                } else {
+                    result = value.apply(this, args);
+                }
+
+                // After advice
+                if (after) {
+                    after.call(this, result, args);
+                }
+
+                return result;
+            };
+        }
+    });
+}
+\end{jscodewithtitle}
+
+\begin{examplebox}{Method Interception Example}
+\begin{jscode}
+const service = {
+    fetchData(id) {
+        console.log(`Fetching ${id}`);
+        return { id, data: 'result' };
+    }
+};
+
+const interceptedService = intercept(service, {
+    fetchData: {
+        before: (args) => console.log(`Before: args = ${args}`),
+        after: (result) => console.log(`After: result = ${JSON.stringify(result)}`),
+        around: (proceed, args) => {
+            console.log('Around: start');
+            const result = proceed();
+            console.log('Around: end');
+            return result;
+        }
+    }
+});
+\end{jscode}
+\end{examplebox}
+
+\section{Virtual Properties}
+
+\begin{jscodewithtitle}{Computed Properties via Proxy}
+function withVirtuals(target, virtuals) {
+    return new Proxy(target, {
+        get(target, prop, receiver) {
+            if (prop in virtuals) {
+                const virtual = virtuals[prop];
+                return typeof virtual === 'function'
+                    ? virtual.call(receiver, target)
+                    : virtual;
+            }
+            return Reflect.get(target, prop, receiver);
+        },
+
+        set(target, prop, value, receiver) {
+            if (prop in virtuals) {
+                throw new TypeError(
+                    `Cannot set virtual property: ${prop}`
+                );
+            }
+            return Reflect.set(target, prop, value, receiver);
+        },
+
+        ownKeys(target) {
+            return [...Reflect.ownKeys(target), ...Object.keys(virtuals)];
+        },
+
+        getOwnPropertyDescriptor(target, prop) {
+            if (prop in virtuals) {
+                return {
+                    enumerable: true,
+                    configurable: true,
+                    get: () => virtuals[prop]
+                };
+            }
+            return Reflect.getOwnPropertyDescriptor(target, prop);
+        }
+    });
+}
+
+// Usage
+const user = withVirtuals(
+    { firstName: 'Alice', lastName: 'Smith', birthYear: 1990 },
+    {
+        fullName: (target) => `${target.firstName} ${target.lastName}`,
+        age: (target) => new Date().getFullYear() - target.birthYear
+    }
+);
+
+user.fullName;  // 'Alice Smith'
+user.age;       // 34 (or current age)
+\end{jscodewithtitle}
+
+\section{Fluent API Builder}
+
+\begin{jscodewithtitle}{Dynamic Fluent API with Proxy}
+function fluentApi(basePath, execute) {
+    const buildProxy = (path) => new Proxy(() => {}, {
+        get(target, prop) {
+            if (prop === 'then') {
+                // Allow await
+                return (resolve) => resolve(execute(path));
+            }
+
+            return buildProxy([...path, prop]);
+        },
+
+        apply(target, thisArg, args) {
+            return buildProxy([...path, { args }]);
+        }
+    });
+
+    return buildProxy([basePath]);
+}
+
+// Usage: API client
+const api = fluentApi('', async (path) => {
+    const url = path
+        .map(p => typeof p === 'object' ? p.args.join('/') : p)
+        .join('/');
+
+    console.log(`Fetching: ${url}`);
+    return { url };
+});
+
+// These all work:
+await api.users;                    // Fetching: users
+await api.users(123);               // Fetching: users/123
+await api.users(123).posts;         // Fetching: users/123/posts
+await api.users(123).posts(456);    // Fetching: users/123/posts/456
+\end{jscodewithtitle}
+
+\section{Practice Exercises}
+
+\begin{exercise}{15.1: Memoizing Proxy}
+Create a proxy that memoizes method calls:
+
+\begin{exercisecode}
+function memoizeProxy(target) {
+    // Cache method results based on arguments
+    // Your code here
+}
+
+const service = memoizeProxy({
+    expensiveCalculation(n) {
+        console.log('Computing...');
+        return n * 2;
+    }
+});
+
+service.expensiveCalculation(5);  // Logs "Computing...", returns 10
+service.expensiveCalculation(5);  // Returns 10 (cached, no log)
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{15.2: Type Checking Proxy}
+Create a proxy that enforces types at runtime:
+
+\begin{exercisecode}
+function typed(schema) {
+    // schema: { propName: 'string' | 'number' | Constructor }
+    // Your code here
+}
+
+const user = typed({
+    name: 'string',
+    age: 'number',
+    createdAt: Date
+})({});
+
+user.name = 'Alice';  // OK
+user.name = 123;      // Throws TypeError
+\end{exercisecode}
+\end{exercise}
+
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+    Observable & React to property changes \\
+    Validation & Runtime type checking \\
+    Lazy & Defer expensive initialization \\
+    Immutable & Prevent modifications \\
+    Intercept & Add cross-cutting concerns (logging, timing) \\
+    Virtual & Computed properties \\
+    Fluent API & Chainable, readable interfaces \\
+    Negative index & Python-style array access \\
+}
+
+\begin{keyinsight}
+Proxies + HOFs enable powerful metaprogramming. Use them at system boundaries (APIs, state management) but avoid in hot paths due to performance overhead.
+\end{keyinsight}
+\end{chaptersummary}
+
+% ============================================================================
+% PART IV SUMMARY
+% ============================================================================
+\chapter*{Part IV Summary: Advanced Patterns Mastered}
+\addcontentsline{toc}{chapter}{Part IV Summary}
+
+You now have advanced techniques:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.3\textwidth} >{\raggedright\arraybackslash}p{0.6\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Topic} & \textbf{\sffamily Key Patterns} \\
+    \midrule
+    Performance & Transducers, lazy evaluation, memoization, V8 optimization \\
+    Error Handling & Either, Maybe, Result, Railway-oriented programming \\
+    Complex Data & Lenses, prisms, traversals, safe path access \\
+    Metaprogramming & Observable, validation, interception, fluent APIs \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\section*{What's Next}
+
+In \textbf{Part V: Mastery \& Reference}, you'll find:
+\begin{itemize}
+    \item Debugging and testing strategies (Chapter 16)
+    \item Quick reference and decision guides (Chapter 17)
+\end{itemize}
+
+\section*{Part IV Practice Project: Reactive State System}
+
+Build a reactive state management system combining all Part IV concepts:
+
+\begin{practiceproject}{Reactive State System}
+Create a comprehensive state management system with:
+
+\begin{steps}
+    \item \textbf{Immutable state with lens-based updates} -- Use lenses for declarative state modifications
+    \item \textbf{Observable changes (Proxy-based)} -- Track all state mutations automatically
+    \item \textbf{Computed values (lazy, memoized)} -- Derive values efficiently with caching
+    \item \textbf{Validation on updates (Either-based)} -- Ensure state integrity with functional validation
+    \item \textbf{Efficient selectors} -- Use transducers for large collection processing
+\end{steps}
+
+\begin{jscode}
+const store = createReactiveStore({
+    initialState: {
+        users: [],
+        filters: { active: true, role: null },
+        settings: { pageSize: 20 }
+    },
+
+    lenses: {
+        users: prop('users'),
+        filters: prop('filters'),
+        activeFilter: path('filters', 'active')
+    },
+
+    computed: {
+        filteredUsers: (state) => /* lazy, memoized */,
+        userCount: (state) => /* derived */
+    },
+
+    validators: {
+        'filters.active': isBoolean,
+        'settings.pageSize': and(isNumber, inRange(1, 100))
+    }
+});
+
+// Subscribe to changes
+store.subscribe((path, newValue, oldValue) => {
+    console.log(`${path} changed`);
+});
+
+// Update with lens
+store.lens('activeFilter').set(false);
+
+// Get computed value (lazy)
+store.computed.filteredUsers;
+
+// Validate on update
+store.lens('settings.pageSize').set(200);  // Throws validation error
+\end{jscode}
+\end{practiceproject}
+
+%% ============================================================================
+%% BACKMATTER
+%% ============================================================================
+\backmatter
+
+\printindex
+
+\end{document}

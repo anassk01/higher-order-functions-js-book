@@ -1,0 +1,60 @@
+%% main.tex
+%% Complete Higher-Order Functions in JavaScript Book
+%% Compile with: lualatex --shell-escape main.tex
+%%
+\documentclass{hofbook}
+
+%% Load custom packages
+\usepackage{hofcode}
+\usepackage{hofvisual}
+
+%% ============================================================================
+%% DOCUMENT METADATA
+%% ============================================================================
+\title{Higher-Order Functions in JavaScript}
+\booksubtitle{A Comprehensive Guide for Web Developers}
+\author{Anass Kabil}
+\date{\today}
+\bookversion{1.0}
+\bookrepo{https://github.com/anassk01/higher-order-functions-js-book}
+
+%% ============================================================================
+%% BEGIN DOCUMENT
+%% ============================================================================
+\begin{document}
+
+%% --- Title Page ---
+\maketitle
+
+%% --- Table of Contents ---
+\frontmatter
+\tableofcontents
+
+%% ============================================================================
+%% MAIN CONTENT - ALL PARTS
+%% ============================================================================
+\mainmatter
+
+%% Part I: Foundations
+\input{part1_foundations}
+
+%% Part II: Patterns & Techniques
+\input{Part2_Patterns_Techniques}
+
+%% Part III: Real-World Web Development
+\input{part3_real_world}
+
+%% Part IV: Advanced Patterns
+\input{Part4_Advanced_Patterns}
+
+%% Part V: Mastery & Reference
+\input{Part5_Mastery_Reference}
+
+%% ============================================================================
+%% BACKMATTER
+%% ============================================================================
+\backmatter
+
+\printindex
+
+\end{document}

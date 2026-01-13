@@ -1,0 +1,2183 @@
+%% part3_real_world.tex
+%% Part III: Real-World Web Development
+%% Compile with: lualatex --shell-escape main.tex (when included in main document)
+%%
+\documentclass{hofbook}
+
+%% Load custom packages
+\usepackage{hofcode}
+\usepackage{hofvisual}
+
+%% ============================================================================
+%% DOCUMENT METADATA
+%% ============================================================================
+\title{Higher-Order Functions in JavaScript}
+\booksubtitle{Part III: Real-World Web Development}
+\author{Your Name}
+\date{\today}
+\bookversion{1.0}
+
+%% ============================================================================
+%% BEGIN DOCUMENT
+%% ============================================================================
+\begin{document}
+
+%% --- Title Page ---
+\maketitle
+
+%% --- Table of Contents ---
+\frontmatter
+\tableofcontents
+
+%% ============================================================================
+%% PART III: REAL-WORLD WEB DEVELOPMENT
+%% ============================================================================
+\mainmatter
+
+\partdivider{III}{Real-World Web Development}
+
+\chapter{HOFs in Async JavaScript}
+
+Asynchronous programming is where higher-order functions truly shine. Promises, async/await, and event-driven patterns are all built on HOF foundations.
+
+%% ============================================================================
+%% SECTION: Promises Are Built on HOFs
+%% ============================================================================
+\section{Promises Are Built on HOFs}
+
+A Promise's \func{.then()}, \func{.catch()}, and \func{.finally()} are all higher-order functions---they take callbacks and return new Promises.
+
+\begin{jscode}
+fetch('/api/user')
+    .then(response => response.json())  // HOF: takes callback
+    .then(user => user.name)            // HOF: takes callback
+    .catch(error => console.error(error))  // HOF: takes callback
+    .finally(() => hideLoader());       // HOF: takes callback
+\end{jscode}
+
+\subsection{The Promise Chain as a Pipeline}
+
+Think of Promise chains as async pipelines:
+
+\begin{jscode}
+// Sync pipeline
+const result = pipe(
+    getData,
+    transform,
+    validate,
+    save
+)(input);
+
+// Async pipeline (Promise chain)
+const result = getData(input)
+    .then(transform)
+    .then(validate)
+    .then(save);
+\end{jscode}
+
+\subsection{Passing Functions Directly}
+
+When your callback just passes its argument to another function, you can pass the function directly:
+
+\begin{comparison}
+\begin{codebad}
+// Verbose
+fetch('/api/users')
+    .then(response => response.json())
+    .then(users => console.log(users));
+\end{codebad}
+
+\begin{codegood}
+// When function signatures match, pass directly
+fetch('/api/users')
+    .then(response => response.json())
+    .then(console.log);  // console.log receives users directly
+\end{codegood}
+\end{comparison}
+
+%% ============================================================================
+%% SECTION: Promise.all with map
+%% ============================================================================
+\section{Promise.all with map}
+
+\code{Promise.all} + \code{map} is the pattern for parallel async operations:
+
+\begin{jscode}
+const userIds = [1, 2, 3, 4, 5];
+
+// Fetch all users in parallel
+const fetchUser = id => fetch(`/api/users/${id}`).then(r => r.json());
+
+const users = await Promise.all(
+    userIds.map(fetchUser)
+);
+// All 5 requests run simultaneously
+\end{jscode}
+
+\subsection{Step by Step}
+
+\begin{steps}
+\item map creates array of Promises
+\begin{jscode}
+const promises = userIds.map(id => fetchUser(id));
+// [Promise<User1>, Promise<User2>, Promise<User3>]
+\end{jscode}
+
+\item Promise.all waits for all to resolve
+\begin{jscode}
+const users = await Promise.all(promises);
+// [User1, User2, User3]
+\end{jscode}
+\end{steps}
+
+\subsection{Real-World Example: Enriching Data}
+
+\begin{jscodewithtitle}{Parallel Data Enrichment}
+async function enrichOrders(orders) {
+    return Promise.all(
+        orders.map(async order => {
+            // Fetch related data in parallel for each order
+            const [customer, products] = await Promise.all([
+                fetchCustomer(order.customerId),
+                Promise.all(order.productIds.map(fetchProduct))
+            ]);
+
+            return {
+                ...order,
+                customer,
+                products
+            };
+        })
+    );
+}
+\end{jscodewithtitle}
+
+\subsection{Handling Partial Failures}
+
+\begin{jscode}
+// Promise.all fails fast - one rejection fails everything
+// Use Promise.allSettled for graceful handling
+
+const results = await Promise.allSettled(
+    urls.map(url => fetch(url).then(r => r.json()))
+);
+
+const successful = results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => r.value);
+
+const failed = results
+    .filter(r => r.status === 'rejected')
+    .map(r => r.reason);
+
+console.log(`${successful.length} succeeded, ${failed.length} failed`);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Sequential vs Parallel Execution
+%% ============================================================================
+\section{Sequential vs Parallel Execution}
+
+\subsection{Parallel: Promise.all + map}
+
+\begin{jscode}
+// All requests start immediately, complete in any order
+const results = await Promise.all(items.map(processAsync));
+\end{jscode}
+
+\subsection{Sequential: for...of with await}
+
+\begin{jscode}
+// Each request waits for the previous one
+const results = [];
+for (const item of items) {
+    const result = await processAsync(item);
+    results.push(result);
+}
+\end{jscode}
+
+\subsection{Sequential: reduce with async}
+
+\begin{jscode}
+// Sequential using reduce
+const results = await items.reduce(async (accPromise, item) => {
+    const acc = await accPromise;
+    const result = await processAsync(item);
+    return [...acc, result];
+}, Promise.resolve([]));
+\end{jscode}
+
+\subsection{When to Use Each}
+
+\begin{comptable}[h]
+\centering
+\begin{tabular}{p{0.25\textwidth} p{0.65\textwidth}}
+\toprule
+\hoftablehead{Pattern & Use When} \\
+\midrule
+Parallel (\code{Promise.all}) & Independent operations, maximize speed \\
+Sequential (\code{for...of}) & Order matters, rate limiting, dependencies \\
+Controlled (\code{p-limit}) & Parallel but with concurrency limit \\
+\bottomrule
+\end{tabular}
+\end{comptable}
+
+%% ============================================================================
+%% SECTION: Controlled Concurrency
+%% ============================================================================
+\section{Controlled Concurrency}
+
+Sometimes you need parallel execution but with limits (e.g., API rate limits):
+
+\begin{jscodewithtitle}{Concurrency Limiter HOF}
+function createLimiter(concurrency) {
+    let active = 0;
+    const queue = [];
+
+    const runNext = () => {
+        if (queue.length === 0 || active >= concurrency) return;
+
+        active++;
+        const { fn, resolve, reject } = queue.shift();
+
+        fn()
+            .then(resolve)
+            .catch(reject)
+            .finally(() => {
+                active--;
+                runNext();
+            });
+    };
+
+    return (fn) => new Promise((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        runNext();
+    });
+}
+
+// Usage
+const limit = createLimiter(3);  // Max 3 concurrent
+
+const results = await Promise.all(
+    urls.map(url => limit(() => fetch(url)))
+);
+// Only 3 requests active at any time
+\end{jscodewithtitle}
+
+\begin{tip}
+For production applications, use battle-tested libraries like \code{p-limit} which handle edge cases and provide additional features.
+\end{tip}
+
+%% ============================================================================
+%% SECTION: Async Higher-Order Functions
+%% ============================================================================
+\section{Async Higher-Order Functions}
+
+\subsection{Async Map}
+
+\begin{jscode}
+// Sequential async map
+async function asyncMap(array, asyncFn) {
+    const results = [];
+    for (const item of array) {
+        results.push(await asyncFn(item));
+    }
+    return results;
+}
+
+// Parallel async map
+async function asyncMapParallel(array, asyncFn) {
+    return Promise.all(array.map(asyncFn));
+}
+
+// Usage
+const users = await asyncMap(userIds, fetchUser);  // Sequential
+const users = await asyncMapParallel(userIds, fetchUser);  // Parallel
+\end{jscode}
+
+\subsection{Async Filter}
+
+\begin{jscode}
+// Filter with async predicate
+async function asyncFilter(array, asyncPredicate) {
+    const results = await Promise.all(
+        array.map(async item => ({
+            item,
+            keep: await asyncPredicate(item)
+        }))
+    );
+    return results
+        .filter(({ keep }) => keep)
+        .map(({ item }) => item);
+}
+
+// Usage: Filter users who have valid subscriptions
+const activeUsers = await asyncFilter(users, async user => {
+    const subscription = await fetchSubscription(user.id);
+    return subscription.active;
+});
+\end{jscode}
+
+\subsection{Async Find}
+
+\begin{jscode}
+// Find with async predicate (sequential - stops early)
+async function asyncFind(array, asyncPredicate) {
+    for (const item of array) {
+        if (await asyncPredicate(item)) {
+            return item;
+        }
+    }
+    return undefined;
+}
+
+// Usage
+const validServer = await asyncFind(servers, async server => {
+    try {
+        const health = await checkHealth(server);
+        return health.status === 'ok';
+    } catch {
+        return false;
+    }
+});
+\end{jscode}
+
+\subsection{Async Reduce}
+
+\begin{jscode}
+// Sequential async reduce
+async function asyncReduce(array, asyncReducer, initialValue) {
+    let accumulator = initialValue;
+    for (const item of array) {
+        accumulator = await asyncReducer(accumulator, item);
+    }
+    return accumulator;
+}
+
+// Usage: Process files sequentially, accumulating results
+const report = await asyncReduce(
+    files,
+    async (report, file) => {
+        const content = await readFile(file);
+        const analysis = await analyzeContent(content);
+        return {
+            ...report,
+            [file]: analysis
+        };
+    },
+    {}
+);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Retry Logic as HOF
+%% ============================================================================
+\section{Retry Logic as HOF}
+
+Wrap any async function with retry capability:
+
+\begin{jscodewithtitle}{Basic Retry Wrapper}
+function withRetry(asyncFn, maxRetries = 3, delay = 1000) {
+    return async function(...args) {
+        let lastError;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await asyncFn(...args);
+            } catch (error) {
+                lastError = error;
+                console.log(`Attempt ${attempt} failed:`, error.message);
+
+                if (attempt < maxRetries) {
+                    await sleep(delay);
+                }
+            }
+        }
+
+        throw lastError;
+    };
+}
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Usage
+const fetchWithRetry = withRetry(fetch, 3, 1000);
+const response = await fetchWithRetry('/api/data');
+\end{jscodewithtitle}
+
+\subsection{Exponential Backoff}
+
+\begin{jscode}
+function withExponentialBackoff(asyncFn, maxRetries = 5, baseDelay = 100) {
+    return async function(...args) {
+        let lastError;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                return await asyncFn(...args);
+            } catch (error) {
+                lastError = error;
+
+                if (attempt < maxRetries - 1) {
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    const jitter = Math.random() * delay * 0.1;  // 10% jitter
+                    await sleep(delay + jitter);
+                }
+            }
+        }
+
+        throw lastError;
+    };
+}
+
+// Usage
+const resilientFetch = withExponentialBackoff(fetch);
+// Retries: 100ms, 200ms, 400ms, 800ms, 1600ms (with jitter)
+\end{jscode}
+
+\subsection{Conditional Retry}
+
+\begin{jscode}
+function withConditionalRetry(asyncFn, shouldRetry, maxRetries = 3) {
+    return async function(...args) {
+        let lastError;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await asyncFn(...args);
+            } catch (error) {
+                lastError = error;
+
+                // Check if we should retry this error
+                if (!shouldRetry(error) || attempt === maxRetries) {
+                    throw error;
+                }
+
+                await sleep(1000 * attempt);
+            }
+        }
+
+        throw lastError;
+    };
+}
+
+// Only retry on network errors or 5xx status
+const isRetryable = error =>
+    error.name === 'NetworkError' ||
+    (error.status && error.status >= 500);
+
+const smartFetch = withConditionalRetry(fetch, isRetryable);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Debounce and Throttle
+%% ============================================================================
+\section{Debounce and Throttle}
+
+\subsection{Debounce: Wait for Pause}
+
+Debounce delays execution until after a pause in calls:
+
+\begin{jscode}
+function debounce(fn, delay) {
+    let timeoutId;
+
+    return function(...args) {
+        clearTimeout(timeoutId);
+
+        timeoutId = setTimeout(() => {
+            fn.apply(this, args);
+        }, delay);
+    };
+}
+
+// Usage: Search input
+const searchInput = document.getElementById('search');
+const handleSearch = debounce(async (query) => {
+    const results = await searchApi(query);
+    displayResults(results);
+}, 300);
+
+searchInput.addEventListener('input', (e) => {
+    handleSearch(e.target.value);
+});
+\end{jscode}
+
+\begin{note}
+Debounce is perfect for search inputs, auto-save features, and window resize handlers where you want to wait for the user to finish their action.
+\end{note}
+
+\subsection{Debounce with Promise}
+
+\begin{jscode}
+function debounceAsync(fn, delay) {
+    let timeoutId;
+    let pendingPromise = null;
+    let resolve, reject;
+
+    return function(...args) {
+        clearTimeout(timeoutId);
+
+        if (!pendingPromise) {
+            pendingPromise = new Promise((res, rej) => {
+                resolve = res;
+                reject = rej;
+            });
+        }
+
+        timeoutId = setTimeout(async () => {
+            try {
+                const result = await fn.apply(this, args);
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            } finally {
+                pendingPromise = null;
+            }
+        }, delay);
+
+        return pendingPromise;
+    };
+}
+
+// Usage
+const debouncedSearch = debounceAsync(searchApi, 300);
+const results = await debouncedSearch('query');  // Returns promise
+\end{jscode}
+
+\subsection{Throttle: Rate Limit}
+
+Throttle ensures function runs at most once per interval:
+
+\begin{jscode}
+function throttle(fn, interval) {
+    let lastTime = 0;
+    let timeoutId;
+
+    return function(...args) {
+        const now = Date.now();
+
+        if (now - lastTime >= interval) {
+            lastTime = now;
+            fn.apply(this, args);
+        } else {
+            // Schedule for end of interval
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                lastTime = Date.now();
+                fn.apply(this, args);
+            }, interval - (now - lastTime));
+        }
+    };
+}
+
+// Usage: Scroll handler
+const handleScroll = throttle(() => {
+    console.log('Scroll position:', window.scrollY);
+}, 100);
+
+window.addEventListener('scroll', handleScroll);
+\end{jscode}
+
+\begin{keyinsight}
+\textbf{Debounce vs Throttle}: Debounce waits for a pause (good for search), while throttle runs at regular intervals (good for scroll events). Choose based on whether you want the last call or regular sampling.
+\end{keyinsight}
+
+%% ============================================================================
+%% SECTION: Timeout Wrapper
+%% ============================================================================
+\section{Timeout Wrapper}
+
+Add timeout to any async function:
+
+\begin{jscode}
+function withTimeout(asyncFn, ms) {
+    return async function(...args) {
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
+        });
+
+        return Promise.race([
+            asyncFn(...args),
+            timeoutPromise
+        ]);
+    };
+}
+
+// Usage
+const quickFetch = withTimeout(fetch, 5000);
+
+try {
+    const response = await quickFetch('/api/slow-endpoint');
+} catch (error) {
+    if (error.message.includes('Timeout')) {
+        console.log('Request took too long');
+    }
+}
+\end{jscode}
+
+\subsection{With AbortController}
+
+\begin{jscode}
+function withAbortableTimeout(asyncFn, ms) {
+    return async function(...args) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), ms);
+
+        try {
+            // Pass signal to the function if it supports it
+            const result = await asyncFn(...args, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            return result;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error(`Timeout after ${ms}ms`);
+            }
+            throw error;
+        }
+    };
+}
+
+// Usage with fetch
+const fetchWithTimeout = withAbortableTimeout(
+    (url, options = {}) => fetch(url, options),
+    5000
+);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Async Pipeline
+%% ============================================================================
+\section{Async Pipeline}
+
+Build async pipelines that process data through stages:
+
+\begin{jscode}
+const pipeAsync = (...fns) => async (input) => {
+    let result = input;
+    for (const fn of fns) {
+        result = await fn(result);
+    }
+    return result;
+};
+
+// Usage
+const processUser = pipeAsync(
+    validateInput,
+    fetchUserFromDb,
+    enrichWithPermissions,
+    formatForResponse
+);
+
+const user = await processUser({ id: 123 });
+\end{jscode}
+
+\subsection{With Error Handling}
+
+\begin{jscode}
+const pipeAsyncSafe = (...fns) => async (input) => {
+    let result = input;
+
+    for (const fn of fns) {
+        try {
+            result = await fn(result);
+        } catch (error) {
+            return { success: false, error, failedAt: fn.name };
+        }
+    }
+
+    return { success: true, data: result };
+};
+
+// Usage
+const result = await pipeAsyncSafe(
+    validateInput,
+    fetchUserFromDb,
+    enrichWithPermissions
+)({ id: 123 });
+
+if (!result.success) {
+    console.error(`Pipeline failed at ${result.failedAt}:`, result.error);
+}
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Event Handling Patterns
+%% ============================================================================
+\section{Event Handling Patterns}
+
+\subsection{Once: Execute Only First Time}
+
+\begin{jscode}
+function once(fn) {
+    let called = false;
+    let result;
+
+    return function(...args) {
+        if (!called) {
+            called = true;
+            result = fn.apply(this, args);
+        }
+        return result;
+    };
+}
+
+// Usage
+const initializeOnce = once(() => {
+    console.log('Initializing...');
+    return setupApplication();
+});
+
+initializeOnce();  // 'Initializing...'
+initializeOnce();  // (nothing, returns cached result)
+\end{jscode}
+
+\subsection{After: Execute After N Calls}
+
+\begin{jscode}
+function after(n, fn) {
+    let count = 0;
+
+    return function(...args) {
+        count++;
+        if (count >= n) {
+            return fn.apply(this, args);
+        }
+    };
+}
+
+// Usage: Run after all async operations complete
+const allDone = after(3, () => console.log('All 3 operations complete!'));
+
+fetchData1().then(allDone);
+fetchData2().then(allDone);
+fetchData3().then(allDone);
+// Logs after the 3rd call
+\end{jscode}
+
+\subsection{Before: Execute Only First N Times}
+
+\begin{jscode}
+function before(n, fn) {
+    let count = 0;
+    let result;
+
+    return function(...args) {
+        if (count < n) {
+            count++;
+            result = fn.apply(this, args);
+        }
+        return result;
+    };
+}
+
+// Usage: Limit to first 3 attempts
+const limitedRetry = before(3, () => {
+    console.log('Retrying...');
+    return attemptOperation();
+});
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Chapter 8 Exercises
+%% ============================================================================
+\section{Practice Exercises}
+
+\begin{exercise}{8.1: Parallel with Limit}
+Implement a function that processes items in parallel but with a concurrency limit:
+
+\begin{exercisecode}
+async function mapWithLimit(items, limit, asyncFn) {
+    // Your code here
+}
+
+// Usage
+const results = await mapWithLimit(
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    3,  // Max 3 concurrent
+    async (n) => {
+        await sleep(1000);
+        return n * 2;
+    }
+);
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{8.2: Retry with Backoff}
+Create a retry wrapper with exponential backoff and max retries:
+
+\begin{exercisecode}
+function withRetry(asyncFn, options = {}) {
+    // Options: maxRetries, baseDelay, maxDelay, shouldRetry
+    // Your code here
+}
+
+// Usage
+const resilientFetch = withRetry(fetch, {
+    maxRetries: 5,
+    baseDelay: 100,
+    maxDelay: 5000,
+    shouldRetry: (error) => error.status >= 500
+});
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{8.3: Async Queue}
+Build a queue that processes async tasks one at a time:
+
+\begin{exercisecode}
+function createAsyncQueue() {
+    // Return: { add(asyncFn), pause(), resume(), clear() }
+    // Your code here
+}
+
+// Usage
+const queue = createAsyncQueue();
+queue.add(() => fetchData(1));
+queue.add(() => fetchData(2));
+queue.add(() => fetchData(3));
+// Processes one at a time in order
+\end{exercisecode}
+\end{exercise}
+
+%% ============================================================================
+%% SECTION: Chapter 8 Summary
+%% ============================================================================
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+Parallel execution & \code{Promise.all} + \code{map} for independent operations \\
+Sequential execution & \code{for...of} + \code{await} for ordered operations \\
+Controlled concurrency & Limiter HOF for API rate limits \\
+Retry logic & \code{withRetry} wrapper for resilient network calls \\
+Debounce & Wait for pause (user input, auto-save) \\
+Throttle & Rate limit (scroll, mouse events) \\
+Timeout & \code{withTimeout} wrapper to prevent hanging \\
+Cancellation & AbortController for user navigation \\
+}
+
+\begin{keyinsight}
+Async operations compose just like sync ones. Wrap them with HOFs to add retry, timeout, debounce, and other behaviors without changing the original function.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ============================================================================
+%% CHAPTER 9: HOFs IN REACT
+%% ============================================================================
+\chapter{HOFs in React}
+
+React is built on higher-order function concepts. Understanding HOFs deeply will make you a better React developer.
+
+\section{React Hooks Are HOF-Based}
+
+Every React hook follows HOF patterns:
+
+\begin{jscode}
+// useState: returns state and a function to update it
+const [count, setCount] = useState(0);
+
+// useEffect: takes a function, optionally returns a cleanup function
+useEffect(() => {
+    const handler = () => console.log('clicked');
+    window.addEventListener('click', handler);
+
+    return () => window.removeEventListener('click', handler);  // Cleanup
+}, []);
+
+// useCallback: takes a function, returns a memoized function
+const handleClick = useCallback(() => {
+    console.log('clicked');
+}, []);
+
+// useMemo: takes a function, returns the memoized result
+const expensiveValue = useMemo(() => {
+    return computeExpensiveValue(data);
+}, [data]);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: useCallback
+%% ============================================================================
+\section{useCallback: Memoizing Functions}
+
+\func{useCallback} prevents creating new function references on every render:
+
+\subsection{The Problem}
+
+\begin{jscode}
+function Parent() {
+    const [count, setCount] = useState(0);
+
+    // This creates a NEW function every render
+    const handleClick = () => {
+        console.log('clicked');
+    };
+
+    return (
+        <>
+            <button onClick={() => setCount(c => c + 1)}>Count: {count}</button>
+            <ExpensiveChild onClick={handleClick} />
+        </>
+    );
+}
+
+// ExpensiveChild re-renders every time Parent renders
+// because handleClick is a new reference each time!
+\end{jscode}
+
+\subsection{The Solution}
+
+\begin{jscode}
+function Parent() {
+    const [count, setCount] = useState(0);
+
+    // Same function reference across renders
+    const handleClick = useCallback(() => {
+        console.log('clicked');
+    }, []);  // Empty deps = never recreate
+
+    return (
+        <>
+            <button onClick={() => setCount(c => c + 1)}>Count: {count}</button>
+            <ExpensiveChild onClick={handleClick} />
+        </>
+    );
+}
+
+const ExpensiveChild = React.memo(({ onClick }) => {
+    console.log('ExpensiveChild rendered');
+    return <button onClick={onClick}>Click me</button>;
+});
+\end{jscode}
+
+\begin{tip}
+Use \func{useCallback} when passing callbacks to memoized child components with \code{React.memo}. This prevents unnecessary re-renders and improves performance in large component trees.
+\end{tip}
+
+\subsection{When Dependencies Change}
+
+\begin{jscode}
+function SearchBox({ onSearch }) {
+    const [query, setQuery] = useState('');
+
+    // Recreate only when query changes
+    const handleSubmit = useCallback(() => {
+        onSearch(query);
+    }, [query, onSearch]);
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <input value={query} onChange={e => setQuery(e.target.value)} />
+        </form>
+    );
+}
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: useMemo
+%% ============================================================================
+\section{useMemo: Memoizing Values}
+
+\func{useMemo} memoizes the result of a computation:
+
+\begin{jscode}
+function ProductList({ products, filterText }) {
+    // Only recompute when products or filterText change
+    const filteredProducts = useMemo(() => {
+        console.log('Filtering products...');
+        return products.filter(p =>
+            p.name.toLowerCase().includes(filterText.toLowerCase())
+        );
+    }, [products, filterText]);
+
+    // Only recompute when filteredProducts change
+    const totalValue = useMemo(() => {
+        return filteredProducts.reduce((sum, p) => sum + p.price, 0);
+    }, [filteredProducts]);
+
+    return (
+        <div>
+            <p>Total: ${totalValue}</p>
+            <ul>
+                {filteredProducts.map(p => (
+                    <li key={p.id}>{p.name}: ${p.price}</li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+\end{jscode}
+
+\subsection{useMemo vs useCallback}
+
+\begin{definition}{useMemo vs useCallback}
+\begin{jscode}
+// useMemo: memoizes the RESULT of calling the function
+const memoizedValue = useMemo(() => computeValue(a, b), [a, b]);
+
+// useCallback: memoizes the FUNCTION ITSELF
+const memoizedFn = useCallback(() => computeValue(a, b), [a, b]);
+
+// These are equivalent:
+useCallback(fn, deps)
+useMemo(() => fn, deps)
+\end{jscode}
+\end{definition}
+
+\subsection{When to Use useMemo}
+
+\begin{enumerate}
+\item \textbf{Expensive computations}
+\begin{jscode}
+const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => a.name.localeCompare(b.name));
+}, [items]);
+\end{jscode}
+
+\item \textbf{Referential equality for objects/arrays}
+\begin{jscode}
+// Without useMemo, new object every render
+const style = { color: 'red', fontSize: size };  // New ref!
+
+// With useMemo, stable reference
+const style = useMemo(() => ({
+    color: 'red',
+    fontSize: size
+}), [size]);
+\end{jscode}
+
+\item \textbf{Dependencies for other hooks}
+\begin{jscode}
+const config = useMemo(() => ({
+    endpoint: '/api/users',
+    params: { role: userRole }
+}), [userRole]);
+
+useEffect(() => {
+    fetchData(config);
+}, [config]);  // Won't re-run unless userRole changes
+\end{jscode}
+\end{enumerate}
+
+%% ============================================================================
+%% SECTION: Stale Closure Problem
+%% ============================================================================
+\section{The Stale Closure Problem}
+
+The most common HOF-related bug in React:
+
+\subsection{The Problem}
+
+\begin{codebad}
+function Counter() {
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            console.log('Count is:', count);  // Always logs 0!
+            setCount(count + 1);              // Always sets to 1!
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, []);  // Empty deps: closure captures initial count (0)
+
+    return <div>{count}</div>;
+}
+\end{codebad}
+
+\begin{danger}
+The closure captures \code{count} at the time the effect runs (0), and never sees updates. This is the \textbf{stale closure} problem---one of the most common React bugs!
+\end{danger}
+
+\subsection{Fix 1: Functional Updates}
+
+\begin{codegood}
+function Counter() {
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCount(c => c + 1);  // c is always current!
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    return <div>{count}</div>;
+}
+\end{codegood}
+
+\subsection{Fix 2: Include in Dependencies}
+
+\begin{jscode}
+function Counter() {
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            console.log('Count is:', count);  // Now correct
+            setCount(count + 1);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [count]);  // Re-run effect when count changes
+
+    return <div>{count}</div>;
+}
+\end{jscode}
+
+\begin{warning}
+This approach creates a new interval on every count change! While it works, it's inefficient. Use functional updates (Fix 1) or refs (Fix 3) instead.
+\end{warning}
+
+\subsection{Fix 3: useRef for Mutable Reference}
+
+\begin{codegood}
+function Counter() {
+    const [count, setCount] = useState(0);
+    const countRef = useRef(count);
+
+    // Keep ref in sync
+    useEffect(() => {
+        countRef.current = count;
+    }, [count]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            console.log('Count is:', countRef.current);  // Always current
+            setCount(c => c + 1);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    return <div>{count}</div>;
+}
+\end{codegood}
+
+%% ============================================================================
+%% SECTION: Custom Hooks as HOF Patterns
+%% ============================================================================
+\section{Custom Hooks as HOF Patterns}
+
+Custom hooks are essentially higher-order patterns for stateful logic:
+
+\subsection{useToggle}
+
+\begin{jscode}
+function useToggle(initialValue = false) {
+    const [value, setValue] = useState(initialValue);
+
+    const toggle = useCallback(() => {
+        setValue(v => !v);
+    }, []);
+
+    const setTrue = useCallback(() => setValue(true), []);
+    const setFalse = useCallback(() => setValue(false), []);
+
+    return [value, toggle, setTrue, setFalse];
+}
+
+// Usage
+function Modal() {
+    const [isOpen, toggle, open, close] = useToggle(false);
+
+    return (
+        <>
+            <button onClick={open}>Open Modal</button>
+            {isOpen && (
+                <div className="modal">
+                    <button onClick={close}>Close</button>
+                </div>
+            )}
+        </>
+    );
+}
+\end{jscode}
+
+\subsection{useDebounce}
+
+\begin{jscode}
+function useDebounce(value, delay) {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+
+        return () => clearTimeout(timer);
+    }, [value, delay]);
+
+    return debouncedValue;
+}
+
+// Usage
+function Search() {
+    const [query, setQuery] = useState('');
+    const debouncedQuery = useDebounce(query, 300);
+
+    useEffect(() => {
+        if (debouncedQuery) {
+            searchApi(debouncedQuery).then(setResults);
+        }
+    }, [debouncedQuery]);
+
+    return <input value={query} onChange={e => setQuery(e.target.value)} />;
+}
+\end{jscode}
+
+\subsection{useAsync}
+
+\begin{jscode}
+function useAsync(asyncFn, deps = []) {
+    const [state, setState] = useState({
+        loading: true,
+        error: null,
+        data: null
+    });
+
+    useEffect(() => {
+        let cancelled = false;
+
+        setState(s => ({ ...s, loading: true }));
+
+        asyncFn()
+            .then(data => {
+                if (!cancelled) {
+                    setState({ loading: false, error: null, data });
+                }
+            })
+            .catch(error => {
+                if (!cancelled) {
+                    setState({ loading: false, error, data: null });
+                }
+            });
+
+        return () => { cancelled = true; };
+    }, deps);
+
+    return state;
+}
+
+// Usage
+function UserProfile({ userId }) {
+    const { loading, error, data: user } = useAsync(
+        () => fetchUser(userId),
+        [userId]
+    );
+
+    if (loading) return <Spinner />;
+    if (error) return <Error message={error.message} />;
+    return <Profile user={user} />;
+}
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Higher-Order Components
+%% ============================================================================
+\section{Higher-Order Components (HOCs)}
+
+HOCs are functions that take a component and return a new enhanced component:
+
+\begin{jscode}
+// HOC that adds loading state
+function withLoading(WrappedComponent) {
+    return function WithLoadingComponent({ isLoading, ...props }) {
+        if (isLoading) {
+            return <Spinner />;
+        }
+        return <WrappedComponent {...props} />;
+    };
+}
+
+// Usage
+const UserListWithLoading = withLoading(UserList);
+
+<UserListWithLoading isLoading={loading} users={users} />
+\end{jscode}
+
+\subsection{HOC with Configuration}
+
+\begin{jscode}
+function withAuth(WrappedComponent, { redirectTo = '/login' } = {}) {
+    return function WithAuthComponent(props) {
+        const { isAuthenticated, isLoading } = useAuth();
+
+        if (isLoading) {
+            return <Spinner />;
+        }
+
+        if (!isAuthenticated) {
+            return <Navigate to={redirectTo} />;
+        }
+
+        return <WrappedComponent {...props} />;
+    };
+}
+
+// Usage
+const ProtectedDashboard = withAuth(Dashboard);
+const ProtectedAdmin = withAuth(AdminPanel, { redirectTo: '/unauthorized' });
+\end{jscode}
+
+\subsection{Composing Multiple HOCs}
+
+\begin{jscode}
+// Using compose for multiple HOCs
+const compose = (...fns) => x => fns.reduceRight((acc, fn) => fn(acc), x);
+
+const EnhancedComponent = compose(
+    withAuth,
+    withLoading,
+    withErrorBoundary
+)(BaseComponent);
+
+// Equivalent to:
+const EnhancedComponent = withAuth(withLoading(withErrorBoundary(BaseComponent)));
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Chapter 9 Exercises
+%% ============================================================================
+\section{Practice Exercises}
+
+\begin{exercise}{9.1: useThrottle Hook}
+Create a hook that throttles a value:
+
+\begin{exercisecode}
+function useThrottle(value, interval) {
+    // Your code here
+}
+
+// Usage
+const [position, setPosition] = useState({ x: 0, y: 0 });
+const throttledPosition = useThrottle(position, 100);
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{9.2: useLocalStorage Hook}
+Create a hook that syncs state with localStorage:
+
+\begin{exercisecode}
+function useLocalStorage(key, initialValue) {
+    // Your code here
+}
+
+// Usage
+const [theme, setTheme] = useLocalStorage('theme', 'light');
+// State persists across page reloads
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{9.3: useAsyncCallback Hook}
+Create a hook that tracks loading/error state for an async callback:
+
+\begin{exercisecode}
+function useAsyncCallback(asyncFn) {
+    // Return [execute, { loading, error, data }]
+    // Your code here
+}
+
+// Usage
+const [submitForm, { loading, error }] = useAsyncCallback(
+    async (data) => {
+        const response = await api.submit(data);
+        return response;
+    }
+);
+\end{exercisecode}
+\end{exercise}
+
+%% ============================================================================
+%% SECTION: Chapter 9 Summary
+%% ============================================================================
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+\code{useCallback} & Memoize function references \\
+\code{useMemo} & Memoize computed values \\
+Functional updates & Avoid stale closures in state setters \\
+\code{useRef} & Mutable container for latest values \\
+Custom hooks & Reusable stateful logic \\
+Render props & Share logic via function children \\
+HOCs & Enhance components with additional behavior \\
+Compound components & Flexible, composable component APIs \\
+}
+
+\begin{keyinsight}
+React's hooks are HOFs in disguise. Understanding closures and function references is essential for avoiding bugs and writing performant React code.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ============================================================================
+%% CHAPTER 10: HOFs IN STATE MANAGEMENT
+%% ============================================================================
+\chapter{HOFs in State Management}
+
+Redux, Context, and other state management patterns are built on higher-order function principles.
+
+\section{Redux: HOFs Everywhere}
+
+Redux is essentially a collection of higher-order patterns:
+
+\begin{jscode}
+// createStore: returns an object with methods that close over state
+const store = createStore(reducer);
+
+// Reducer: a pure function that returns new state
+const reducer = (state, action) => newState;
+
+// Middleware: HOF that takes store, returns HOF that takes next
+const middleware = store => next => action => { ... };
+
+// connect: HOC that subscribes component to store
+const ConnectedComponent = connect(mapState, mapDispatch)(Component);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: The Reducer Pattern
+%% ============================================================================
+\section{The Reducer Pattern}
+
+Reducers are pure functions that encapsulate state transitions:
+
+\begin{jscode}
+// Basic reducer
+function counterReducer(state = 0, action) {
+    switch (action.type) {
+        case 'INCREMENT':
+            return state + 1;
+        case 'DECREMENT':
+            return state - 1;
+        case 'SET':
+            return action.payload;
+        default:
+            return state;
+    }
+}
+
+// More complex reducer
+function todosReducer(state = [], action) {
+    switch (action.type) {
+        case 'ADD_TODO':
+            return [...state, {
+                id: Date.now(),
+                text: action.payload,
+                completed: false
+            }];
+
+        case 'TOGGLE_TODO':
+            return state.map(todo =>
+                todo.id === action.payload
+                    ? { ...todo, completed: !todo.completed }
+                    : todo
+            );
+
+        case 'DELETE_TODO':
+            return state.filter(todo => todo.id !== action.payload);
+
+        default:
+            return state;
+    }
+}
+\end{jscode}
+
+\subsection{Higher-Order Reducers}
+
+\begin{jscodewithtitle}{Undoable Higher-Order Reducer}
+// HOF that adds undo/redo capability to any reducer
+function undoable(reducer) {
+    const initialState = {
+        past: [],
+        present: reducer(undefined, {}),
+        future: []
+    };
+
+    return function(state = initialState, action) {
+        const { past, present, future } = state;
+
+        switch (action.type) {
+            case 'UNDO':
+                if (past.length === 0) return state;
+                return {
+                    past: past.slice(0, -1),
+                    present: past[past.length - 1],
+                    future: [present, ...future]
+                };
+
+            case 'REDO':
+                if (future.length === 0) return state;
+                return {
+                    past: [...past, present],
+                    present: future[0],
+                    future: future.slice(1)
+                };
+
+            default:
+                const newPresent = reducer(present, action);
+                if (newPresent === present) return state;
+                return {
+                    past: [...past, present],
+                    present: newPresent,
+                    future: []
+                };
+        }
+    };
+}
+
+// Usage
+const undoableTodos = undoable(todosReducer);
+\end{jscodewithtitle}
+
+\subsection{Resettable Reducer HOF}
+
+\begin{jscode}
+function resettable(reducer, resetActionType = 'RESET') {
+    const initialState = reducer(undefined, {});
+
+    return function(state, action) {
+        if (action.type === resetActionType) {
+            return initialState;
+        }
+        return reducer(state, action);
+    };
+}
+
+// Usage
+const resettableCounter = resettable(counterReducer);
+dispatch({ type: 'RESET' });  // Returns to initial state
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Redux Middleware
+%% ============================================================================
+\section{Redux Middleware}
+
+Middleware signature is a triple-nested HOF:
+
+\begin{definition}{Middleware Pattern}
+\begin{jscode}
+// store => next => action => result
+const middleware = store => next => action => {
+    // Do something before
+    const result = next(action);
+    // Do something after
+    return result;
+};
+\end{jscode}
+\end{definition}
+
+\subsection{Logger Middleware}
+
+\begin{jscode}
+const logger = store => next => action => {
+    console.group(action.type);
+    console.log('Prev State:', store.getState());
+    console.log('Action:', action);
+
+    const result = next(action);
+
+    console.log('Next State:', store.getState());
+    console.groupEnd();
+
+    return result;
+};
+\end{jscode}
+
+\subsection{Thunk Middleware}
+
+\begin{jscode}
+const thunk = store => next => action => {
+    // If action is a function, call it with dispatch and getState
+    if (typeof action === 'function') {
+        return action(store.dispatch, store.getState);
+    }
+
+    // Otherwise, pass action along
+    return next(action);
+};
+
+// Usage: action creator that returns a function
+const fetchUser = (id) => async (dispatch, getState) => {
+    dispatch({ type: 'FETCH_USER_START' });
+
+    try {
+        const user = await api.getUser(id);
+        dispatch({ type: 'FETCH_USER_SUCCESS', payload: user });
+    } catch (error) {
+        dispatch({ type: 'FETCH_USER_ERROR', payload: error.message });
+    }
+};
+
+// Dispatch the thunk
+dispatch(fetchUser(123));
+\end{jscode}
+
+\subsection{Analytics Middleware}
+
+\begin{jscode}
+const analytics = (trackingFn) => store => next => action => {
+    // Track certain actions
+    if (action.meta?.track) {
+        trackingFn({
+            event: action.type,
+            properties: action.meta.trackingData || action.payload
+        });
+    }
+
+    return next(action);
+};
+
+// Usage
+dispatch({
+    type: 'PURCHASE_COMPLETE',
+    payload: { orderId: 123 },
+    meta: {
+        track: true,
+        trackingData: { value: 99.99, currency: 'USD' }
+    }
+});
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Selectors as HOFs
+%% ============================================================================
+\section{Selectors as HOFs}
+
+Selectors are functions that extract and derive data from state:
+
+\begin{jscode}
+// Basic selectors
+const selectTodos = state => state.todos;
+const selectUser = state => state.user;
+
+// Derived selectors (compose from basic ones)
+const selectCompletedTodos = state =>
+    selectTodos(state).filter(todo => todo.completed);
+
+const selectIncompleteTodos = state =>
+    selectTodos(state).filter(todo => !todo.completed);
+
+const selectTodoCount = state => selectTodos(state).length;
+
+// Parameterized selector (HOF)
+const selectTodoById = (id) => (state) =>
+    selectTodos(state).find(todo => todo.id === id);
+\end{jscode}
+
+\subsection{Memoized Selectors with Reselect}
+
+\begin{jscode}
+import { createSelector } from 'reselect';
+
+// Input selectors
+const selectTodos = state => state.todos;
+const selectFilter = state => state.filter;
+
+// Memoized selector: only recomputes when inputs change
+const selectVisibleTodos = createSelector(
+    [selectTodos, selectFilter],
+    (todos, filter) => {
+        console.log('Computing visible todos...');
+
+        switch (filter) {
+            case 'completed':
+                return todos.filter(t => t.completed);
+            case 'active':
+                return todos.filter(t => !t.completed);
+            default:
+                return todos;
+        }
+    }
+);
+
+// Usage
+const visibleTodos = selectVisibleTodos(store.getState());
+\end{jscode}
+
+\begin{tip}
+Use memoized selectors with Reselect when computing derived data from the store. This prevents expensive recalculations on every state change, improving performance significantly.
+\end{tip}
+
+%% ============================================================================
+%% SECTION: Chapter 10 Exercises
+%% ============================================================================
+\section{Practice Exercises}
+
+\begin{exercise}{10.1: Logging Middleware}
+Create a middleware that logs all actions with timing:
+
+\begin{exercisecode}
+const timingLogger = store => next => action => {
+    // Log action, time it, log result
+    // Your code here
+};
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{10.2: Undo/Redo HOF}
+Create a higher-order reducer that adds undo/redo to any reducer:
+
+\begin{exercisecode}
+function withUndoRedo(reducer, options = {}) {
+    // Support: UNDO, REDO, CLEAR_HISTORY actions
+    // Options: maxHistory (limit past states)
+    // Your code here
+}
+\end{exercisecode}
+\end{exercise}
+
+%% ============================================================================
+%% SECTION: Chapter 10 Summary
+%% ============================================================================
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+Reducer & Pure function: \code{(state, action) => newState} \\
+Higher-Order Reducer & HOF that enhances a reducer (undo, reset) \\
+Middleware & Triple HOF: \code{store => next => action => result} \\
+Selector & Function that extracts/derives data from state \\
+Memoized Selector & Selector that caches results \\
+Action Creator & Factory function that creates actions \\
+Thunk & Action that's a function: \code{(dispatch, getState) => ...} \\
+}
+
+\begin{keyinsight}
+Redux architecture is built on function composition. Understanding HOFs deeply makes Redux patterns intuitive and allows you to create powerful abstractions.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ============================================================================
+%% CHAPTER 11: HOFs IN NODE.JS & APIS
+%% ============================================================================
+\chapter{HOFs in Node.js \& APIs}
+
+Server-side JavaScript is built on HOF patterns---from Express middleware to stream transforms to validation pipelines.
+
+\section{Express Middleware Pattern}
+
+Express middleware follows the HOF pattern:
+
+\begin{jscode}
+// Middleware signature
+const middleware = (req, res, next) => {
+    // Do something
+    next();  // Call next middleware
+};
+
+// Usage
+app.use(middleware);
+app.get('/route', middleware, handler);
+\end{jscode}
+
+\subsection{Creating Middleware Factories}
+
+\begin{jscodewithtitle}{Logger Middleware Factory}
+function createLogger(options = {}) {
+    const { format = 'combined', skip = () => false } = options;
+
+    return (req, res, next) => {
+        if (skip(req)) {
+            return next();
+        }
+
+        const start = Date.now();
+
+        res.on('finish', () => {
+            const duration = Date.now() - start;
+            console.log(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+        });
+
+        next();
+    };
+}
+
+// Usage
+app.use(createLogger({ skip: req => req.url === '/health' }));
+\end{jscodewithtitle}
+
+\subsection{Authentication Middleware Factory}
+
+\begin{jscode}
+function requireAuth(options = {}) {
+    const { tokenHeader = 'authorization', onError } = options;
+
+    return async (req, res, next) => {
+        const token = req.headers[tokenHeader];
+
+        if (!token) {
+            const error = new Error('No token provided');
+            error.status = 401;
+            return onError ? onError(error, req, res, next) : next(error);
+        }
+
+        try {
+            const user = await verifyToken(token);
+            req.user = user;
+            next();
+        } catch (error) {
+            error.status = 401;
+            return onError ? onError(error, req, res, next) : next(error);
+        }
+    };
+}
+
+// Usage
+app.get('/protected', requireAuth(), (req, res) => {
+    res.json({ user: req.user });
+});
+\end{jscode}
+
+\subsection{Role-Based Authorization}
+
+\begin{jscode}
+function requireRole(...allowedRoles) {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+
+        const hasRole = allowedRoles.some(role =>
+            req.user.roles.includes(role)
+        );
+
+        if (!hasRole) {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+
+        next();
+    };
+}
+
+// Usage
+app.get('/admin', requireAuth(), requireRole('admin'), adminHandler);
+app.get('/dashboard', requireAuth(), requireRole('admin', 'manager'), dashboardHandler);
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Middleware Composition
+%% ============================================================================
+\section{Middleware Composition}
+
+\subsection{Compose Multiple Middleware}
+
+\begin{jscode}
+function compose(...middlewares) {
+    return (req, res, next) => {
+        let index = 0;
+
+        function dispatch(i) {
+            if (i >= middlewares.length) {
+                return next();
+            }
+
+            const middleware = middlewares[i];
+
+            try {
+                middleware(req, res, () => dispatch(i + 1));
+            } catch (error) {
+                next(error);
+            }
+        }
+
+        dispatch(0);
+    };
+}
+
+// Usage
+const apiMiddleware = compose(
+    cors(),
+    rateLimit(),
+    requireAuth(),
+    validateRequest()
+);
+
+app.use('/api', apiMiddleware);
+\end{jscode}
+
+\subsection{Conditional Middleware}
+
+\begin{jscode}
+function when(condition, middleware) {
+    return (req, res, next) => {
+        if (condition(req)) {
+            return middleware(req, res, next);
+        }
+        next();
+    };
+}
+
+// Usage
+app.use(when(
+    req => req.path.startsWith('/api'),
+    requireAuth()
+));
+
+app.use(when(
+    req => req.method === 'POST',
+    validateBody()
+));
+\end{jscode}
+
+\subsection{Async Middleware Wrapper}
+
+\begin{jscode}
+// Express doesn't catch async errors by default
+function asyncHandler(fn) {
+    return (req, res, next) => {
+        Promise.resolve(fn(req, res, next)).catch(next);
+    };
+}
+
+// Usage
+app.get('/users/:id', asyncHandler(async (req, res) => {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+        throw new NotFoundError('User not found');
+    }
+    res.json(user);
+}));
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Request Validation
+%% ============================================================================
+\section{Request Validation}
+
+\subsection{Validation Middleware Factory}
+
+\begin{jscode}
+function validate(schema) {
+    return (req, res, next) => {
+        const { error, value } = schema.validate(req.body, {
+            abortEarly: false
+        });
+
+        if (error) {
+            const errors = error.details.map(d => ({
+                field: d.path.join('.'),
+                message: d.message
+            }));
+            return res.status(400).json({ errors });
+        }
+
+        req.validatedBody = value;
+        next();
+    };
+}
+
+// Usage with Joi
+const createUserSchema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().min(8).required(),
+    name: Joi.string().required()
+});
+
+app.post('/users', validate(createUserSchema), asyncHandler(async (req, res) => {
+    const user = await User.create(req.validatedBody);
+    res.status(201).json(user);
+}));
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Error Handling Patterns
+%% ============================================================================
+\section{Error Handling Patterns}
+
+\subsection{Error Handler Factory}
+
+\begin{jscode}
+function createErrorHandler(options = {}) {
+    const { logErrors = true, includeStack = false } = options;
+
+    return (error, req, res, next) => {
+        if (logErrors) {
+            console.error('Error:', {
+                message: error.message,
+                stack: error.stack,
+                url: req.url,
+                method: req.method
+            });
+        }
+
+        const status = error.status || error.statusCode || 500;
+        const response = {
+            error: error.message || 'Internal Server Error'
+        };
+
+        if (includeStack && process.env.NODE_ENV !== 'production') {
+            response.stack = error.stack;
+        }
+
+        res.status(status).json(response);
+    };
+}
+
+// Usage
+app.use(createErrorHandler({
+    logErrors: true,
+    includeStack: process.env.NODE_ENV === 'development'
+}));
+\end{jscode}
+
+%% ============================================================================
+%% SECTION: Chapter 11 Exercises
+%% ============================================================================
+\section{Practice Exercises}
+
+\begin{exercise}{11.1: Request Timing Middleware}
+Create middleware that adds timing headers to responses:
+
+\begin{exercisecode}
+function timing() {
+    // Add X-Response-Time header
+    // Your code here
+}
+
+// Usage
+app.use(timing());
+// Response includes: X-Response-Time: 42ms
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{11.2: Circuit Breaker Middleware}
+Create a circuit breaker for external API calls:
+
+\begin{exercisecode}
+function circuitBreaker(options = {}) {
+    // Options: threshold, resetTimeout
+    // States: CLOSED, OPEN, HALF_OPEN
+    // Your code here
+}
+
+// Usage
+const breaker = circuitBreaker({ threshold: 5, resetTimeout: 30000 });
+app.get('/external', breaker, asyncHandler(async (req, res) => {
+    const data = await externalApi.fetch();
+    res.json(data);
+}));
+\end{exercisecode}
+\end{exercise}
+
+%% ============================================================================
+%% SECTION: Chapter 11 Summary
+%% ============================================================================
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+Middleware Factory & HOF that creates configured middleware \\
+Middleware Composition & Combine multiple middleware into one \\
+Async Handler Wrapper & Catch async errors in Express \\
+Validation Pipeline & Compose validation rules \\
+Response Transformer & Wrap/modify response format \\
+Stream Transform & Process data streams with HOFs \\
+Service Decorator & Add cross-cutting concerns to services \\
+Query Builder & Fluent API for database queries \\
+}
+
+\begin{keyinsight}
+Express and Node.js APIs are naturally HOF-based. Embrace the pattern with factories, composition, and decorators for clean, reusable code.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ============================================================================
+%% PART III SUMMARY
+%% ============================================================================
+\chapter*{Part III Summary: Real-World Patterns Mastered}
+\addcontentsline{toc}{chapter}{Part III Summary}
+
+You now have practical patterns for:
+
+\begin{comptable}[h]
+\centering
+\begin{tabular}{p{0.2\textwidth} p{0.7\textwidth}}
+\toprule
+\hoftablehead{Domain & Patterns Learned} \\
+\midrule
+Async JS & Parallel/sequential execution, retry, debounce, throttle, cancellation \\
+React & Hooks, memoization, custom hooks, HOCs, render props \\
+State & Reducers, middleware, selectors, action creators \\
+Node.js & Middleware, validation, error handling, streams \\
+\bottomrule
+\end{tabular}
+\end{comptable}
+
+\section*{What's Next}
+
+In \textbf{Part IV: Advanced Patterns}, you'll explore:
+\begin{itemize}
+\item Performance optimization and lazy evaluation (Chapter 12)
+\item Functional error handling with Either (Chapter 13)
+\item Working with complex data using lenses (Chapter 14)
+\item Metaprogramming with Proxies (Chapter 15)
+\end{itemize}
+
+%% ============================================================================
+%% PRACTICE PROJECT
+%% ============================================================================
+\section*{Part III Practice Project: Full-Stack API}
+
+\begin{practiceproject}{Full-Stack API with HOF Patterns}
+Build a complete API using the patterns from Part III:
+
+\begin{enumerate}
+\item \textbf{Middleware stack}
+    \begin{itemize}
+    \item Request logging with timing
+    \item Authentication (JWT)
+    \item Rate limiting
+    \item Request validation
+    \end{itemize}
+
+\item \textbf{Resource routes (users, posts)}
+    \begin{itemize}
+    \item CRUD operations
+    \item Pagination
+    \item Filtering
+    \end{itemize}
+
+\item \textbf{State management (for React frontend)}
+    \begin{itemize}
+    \item Redux store with middleware
+    \item Async action creators
+    \item Memoized selectors
+    \end{itemize}
+
+\item \textbf{Error handling}
+    \begin{itemize}
+    \item Custom error classes
+    \item Global error handler
+    \item Validation errors
+    \end{itemize}
+
+\item \textbf{Async utilities}
+    \begin{itemize}
+    \item Retry wrapper for external APIs
+    \item Debounced search endpoint
+    \item Cached responses
+    \end{itemize}
+\end{enumerate}
+
+Focus on:
+\begin{itemize}
+\item Clean separation of concerns
+\item Reusable middleware factories
+\item Proper error propagation
+\item Memoization where appropriate
+\end{itemize}
+\end{practiceproject}
+
+%% ============================================================================
+%% BACKMATTER
+%% ============================================================================
+\backmatter
+
+\printindex
+
+\end{document}

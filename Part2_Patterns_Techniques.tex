@@ -1,0 +1,2478 @@
+%% Part2_Patterns_Techniques.tex
+%% Higher-Order Functions in JavaScript - Part II
+%% Compile with: lualatex --shell-escape Part2_Patterns_Techniques.tex
+%%
+\documentclass{hofbook}
+
+%% Load custom packages
+\usepackage{hofcode}
+\usepackage{hofvisual}
+
+%% ============================================================================
+%% DOCUMENT METADATA
+%% ============================================================================
+\title{Higher-Order Functions in JavaScript}
+\booksubtitle{Part II: Patterns \& Techniques}
+\author{Your Name}
+\date{\today}
+\bookversion{1.0}
+
+%% ============================================================================
+%% BEGIN DOCUMENT
+%% ============================================================================
+\begin{document}
+
+%% --- Title Page ---
+\maketitle
+
+%% --- Table of Contents ---
+\frontmatter
+\tableofcontents
+
+%% ============================================================================
+%% MAIN CONTENT
+%% ============================================================================
+\mainmatter
+
+\partdivider{II}{Patterns \& Techniques}
+
+%% ============================================================================
+%% CHAPTER 4: FUNCTION FACTORIES & CLOSURES
+%% ============================================================================
+\chapter{Function Factories \& Closures}
+
+Function factories are HOFs that create and return new functions. They're the foundation of many powerful patterns in JavaScript---from event handlers to middleware to React hooks.
+
+%% ----------------------------------------------------------------------------
+\section{The Factory Pattern}
+
+A function factory creates specialized functions based on configuration:
+
+\begin{jscode}
+// Factory: creates greeting functions
+function createGreeter(greeting) {
+    return function(name) {
+        return `${greeting}, ${name}!`;
+    };
+}
+
+// Create specialized greeters
+const sayHello = createGreeter('Hello');
+const sayHi = createGreeter('Hi');
+const sayHey = createGreeter('Hey');
+
+// Use them
+sayHello('Alice');  // 'Hello, Alice!'
+sayHi('Bob');       // 'Hi, Bob!'
+sayHey('Charlie');  // 'Hey, Charlie!'
+\end{jscode}
+
+\subsection{Why This Matters}
+
+Instead of writing repetitive code:
+
+\begin{codebad}
+// Without factory: repetitive, coupled code
+function greetWithHello(name) { return `Hello, ${name}!`; }
+function greetWithHi(name) { return `Hi, ${name}!`; }
+function greetWithHey(name) { return `Hey, ${name}!`; }
+\end{codebad}
+
+You get configurable, DRY code:
+
+\begin{codegood}
+// With factory: configurable, DRY
+const sayHello = createGreeter('Hello');
+const sayHi = createGreeter('Hi');
+const sayHey = createGreeter('Hey');
+\end{codegood}
+
+%% ----------------------------------------------------------------------------
+\section{Understanding Closures}
+
+\begin{definition}{Closure}
+A \concept{closure} is a function that ``remembers'' variables from its outer scope, even after that outer function has finished executing.
+\end{definition}
+
+\subsection{The Mechanism}
+
+\begin{jscode}
+function outer() {
+    const secret = 'I am hidden';  // Local variable
+
+    function inner() {
+        console.log(secret);  // Inner function accesses outer's variable
+    }
+
+    return inner;  // Return the inner function
+}
+
+const myFunction = outer();  // outer() runs and returns inner
+// At this point, outer() is done executing
+// But...
+
+myFunction();  // 'I am hidden' — inner still has access to secret!
+\end{jscode}
+
+\begin{note}
+The closure ``closes over'' the variable \code{secret}, keeping it alive in memory even after \func{outer()} has returned.
+\end{note}
+
+\textbf{What happened?}
+
+\begin{steps}
+\item \func{outer()} creates \code{secret} and \code{inner}
+\item \code{inner} references \code{secret}
+\item \func{outer()} returns \code{inner} and finishes
+\item Normally, \code{secret} would be garbage collected
+\item But \code{inner} still needs it, so JavaScript keeps \code{secret} alive
+\item This is the closure---\code{inner} ``closes over'' \code{secret}
+\end{steps}
+
+\subsection{Visualizing Closure}
+
+\begin{asciibox}
+┌─────────────────────────────────────────────┐
+│  outer() Scope                              │
+│  ┌────────────────────────────────────────┐ │
+│  │  secret = 'I am hidden'                │ │
+│  │                                        │ │
+│  │  ┌──────────────────────────────────┐  │ │
+│  │  │  inner() Scope                   │  │ │
+│  │  │  • Has access to: secret         │  │ │
+│  │  │  • This access persists          │  │ │
+│  │  └──────────────────────────────────┘  │ │
+│  └────────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+
+After outer() returns:
+- outer's scope would normally be garbage collected
+- But inner() still references secret
+- So the binding is preserved (the closure)
+\end{asciibox}
+
+\subsection{Each Call Creates a New Closure}
+
+\begin{jscode}
+function createCounter() {
+    let count = 0;  // Each call gets its own count
+    return function() {
+        count++;
+        return count;
+    };
+}
+
+const counterA = createCounter();
+const counterB = createCounter();
+
+counterA();  // 1
+counterA();  // 2
+counterA();  // 3
+
+counterB();  // 1 (separate count!)
+counterB();  // 2
+\end{jscode}
+
+\code{counterA} and \code{counterB} each have their own \code{count} variable---they don't share.
+
+%% ----------------------------------------------------------------------------
+\section{Private State with Closures}
+
+Closures let you create truly private data---inaccessible from outside:
+
+\begin{jscodewithtitle}{Bank Account with Private Balance}
+function createBankAccount(initialBalance) {
+    let balance = initialBalance;  // Private!
+
+    return {
+        deposit(amount) {
+            if (amount > 0) {
+                balance += amount;
+                return balance;
+            }
+            throw new Error('Deposit amount must be positive');
+        },
+
+        withdraw(amount) {
+            if (amount > 0 && amount <= balance) {
+                balance -= amount;
+                return balance;
+            }
+            throw new Error('Invalid withdrawal');
+        },
+
+        getBalance() {
+            return balance;
+        }
+    };
+}
+
+const account = createBankAccount(100);
+
+account.getBalance();   // 100
+account.deposit(50);    // 150
+account.withdraw(30);   // 120
+
+// Cannot access balance directly!
+account.balance;        // undefined
+\end{jscodewithtitle}
+
+\begin{keyinsight}
+This is \textbf{real} privacy---not convention (like \code{\_balance}), not symbols, actual inaccessibility. The \code{balance} variable cannot be accessed from outside the closure.
+\end{keyinsight}
+
+%% ----------------------------------------------------------------------------
+\section{Practical Factory Patterns}
+
+\subsection{Pattern 1: Configured API Fetchers}
+
+\begin{jscode}
+function createApiClient(baseUrl, defaultHeaders = {}) {
+    return {
+        async get(endpoint) {
+            const response = await fetch(`${baseUrl}${endpoint}`, {
+                method: 'GET',
+                headers: defaultHeaders
+            });
+            return response.json();
+        },
+
+        async post(endpoint, data) {
+            const response = await fetch(`${baseUrl}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...defaultHeaders
+                },
+                body: JSON.stringify(data)
+            });
+            return response.json();
+        }
+    };
+}
+
+// Create clients for different APIs
+const github = createApiClient('https://api.github.com', {
+    'Authorization': 'token xxx'
+});
+
+const myApi = createApiClient('https://api.myapp.com', {
+    'X-API-Key': 'my-key'
+});
+
+// Use them
+const user = await github.get('/users/octocat');
+const products = await myApi.get('/products');
+\end{jscode}
+
+\subsection{Pattern 2: Event Handler Factories}
+
+\begin{jscode}
+function createClickHandler(action, options = {}) {
+    const { preventDefault = true, stopPropagation = false, log = false } = options;
+
+    return function(event) {
+        if (preventDefault) event.preventDefault();
+        if (stopPropagation) event.stopPropagation();
+        if (log) console.log(`Action: ${action}`, event);
+
+        // Perform the action
+        switch (action) {
+            case 'save':
+                saveForm();
+                break;
+            case 'delete':
+                deleteItem();
+                break;
+            case 'toggle':
+                toggleState();
+                break;
+        }
+    };
+}
+
+// Create handlers
+const saveHandler = createClickHandler('save', { log: true });
+const deleteHandler = createClickHandler('delete', { stopPropagation: true });
+
+// Attach to elements
+saveButton.addEventListener('click', saveHandler);
+deleteButton.addEventListener('click', deleteHandler);
+\end{jscode}
+
+\subsection{Pattern 3: Validator Factories}
+
+\begin{jscode}
+function createValidator(rules) {
+    return function(value) {
+        const errors = [];
+
+        for (const rule of rules) {
+            if (!rule.test(value)) {
+                errors.push(rule.message);
+            }
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors
+        };
+    };
+}
+
+// Create specific validators
+const validateEmail = createValidator([
+    { test: v => v.length > 0, message: 'Email is required' },
+    { test: v => v.includes('@'), message: 'Email must contain @' },
+    { test: v => v.includes('.'), message: 'Email must contain a domain' }
+]);
+
+const validatePassword = createValidator([
+    { test: v => v.length >= 8, message: 'Password must be at least 8 characters' },
+    { test: v => /[A-Z]/.test(v), message: 'Password must contain uppercase' },
+    { test: v => /[0-9]/.test(v), message: 'Password must contain a number' }
+]);
+
+// Use them
+validateEmail('test@example.com');  // { valid: true, errors: [] }
+validateEmail('invalid');           // { valid: false, errors: [...] }
+
+validatePassword('weak');           // { valid: false, errors: [...] }
+validatePassword('Strong1234');     // { valid: true, errors: [] }
+\end{jscode}
+
+\subsection{Pattern 4: Memoization Factory}
+
+\begin{jscode}
+function createMemoized(fn) {
+    const cache = new Map();
+
+    return function(...args) {
+        const key = JSON.stringify(args);
+
+        if (cache.has(key)) {
+            console.log('Cache hit for:', key);
+            return cache.get(key);
+        }
+
+        console.log('Cache miss for:', key);
+        const result = fn(...args);
+        cache.set(key, result);
+        return result;
+    };
+}
+
+// Memoized Fibonacci
+const fastFib = createMemoized(function(n) {
+    if (n <= 1) return n;
+    return fastFib(n - 1) + fastFib(n - 2);
+});
+
+fastFib(40);  // Fast! Uses cache for repeated calculations
+\end{jscode}
+
+\subsection{Pattern 5: Rate Limiter Factory}
+
+\begin{jscode}
+function createRateLimiter(fn, limit, windowMs) {
+    let calls = 0;
+    let windowStart = Date.now();
+
+    return async function(...args) {
+        const now = Date.now();
+
+        // Reset window if expired
+        if (now - windowStart >= windowMs) {
+            calls = 0;
+            windowStart = now;
+        }
+
+        // Check limit
+        if (calls >= limit) {
+            throw new Error(`Rate limit exceeded. Max ${limit} calls per ${windowMs}ms`);
+        }
+
+        calls++;
+        return fn(...args);
+    };
+}
+
+// Allow max 5 API calls per second
+const limitedFetch = createRateLimiter(fetch, 5, 1000);
+
+// Use it
+try {
+    await limitedFetch('/api/data');  // Works
+    await limitedFetch('/api/data');  // Works
+    // ... after 5 calls in < 1 second:
+    await limitedFetch('/api/data');  // Throws!
+} catch (e) {
+    console.log(e.message);
+}
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Closure Memory Considerations}
+\label{sec:closure-memory}
+
+Closures keep references alive. This is powerful but can cause memory issues.
+
+\subsection{The Problem: Unintended Retention}
+
+\begin{jscode}
+function processData() {
+    const hugeData = new Array(1000000).fill('x');  // ~8MB
+
+    // We only need a small piece
+    const summary = hugeData.length;
+
+    // This closure captures the entire scope
+    return function() {
+        return summary;  // Only uses summary
+    };
+}
+
+const getSummary = processData();
+// hugeData is STILL in memory because the closure exists!
+\end{jscode}
+
+\subsection{The Fix: Minimize Closure Scope}
+
+\begin{jscode}
+function processData() {
+    let summary;
+
+    {
+        // Block scope limits what the closure can capture
+        const hugeData = new Array(1000000).fill('x');
+        summary = hugeData.length;
+        // hugeData goes out of scope here
+    }
+
+    return function() {
+        return summary;  // Only captures summary
+    };
+}
+
+// Or explicitly nullify
+function processData() {
+    let hugeData = new Array(1000000).fill('x');
+    const summary = hugeData.length;
+
+    hugeData = null;  // Release the reference
+
+    return function() {
+        return summary;
+    };
+}
+\end{jscode}
+
+\subsection{The Shared Context Trap}
+
+All closures in the same scope share one context object:
+
+\begin{jscode}
+function createHandlers() {
+    const sharedData = { /* large object */ };
+
+    // BOTH closures keep sharedData alive
+    const handler1 = () => console.log('handler1');  // Doesn't use sharedData
+    const handler2 = () => console.log(sharedData);  // Uses sharedData
+
+    return { handler1, handler2 };
+}
+
+const { handler1 } = createHandlers();
+// Even though we only kept handler1, sharedData is retained
+// because handler1's closure context includes it
+\end{jscode}
+
+\begin{warning}
+Closures keep references alive. Be careful not to accidentally retain large objects in memory.
+\end{warning}
+
+\subsection{Best Practice: Factory Function Hygiene}
+
+\begin{codebad}
+// BAD: Accidentally capturing large data
+function createLoggerBad(config) {
+    // config might be huge, but we only need prefix
+    return (message) => console.log(`[${config.prefix}] ${message}`);
+}
+\end{codebad}
+
+\begin{codegood}
+// GOOD: Only close over what you need
+function createLogger(prefix) {
+    // prefix is small, intentionally captured
+    return (message) => console.log(`[${prefix}] ${message}`);
+}
+
+// Or extract what you need
+function createLoggerFixed(config) {
+    const prefix = config.prefix;  // Extract only what's needed
+    return (message) => console.log(`[${prefix}] ${message}`);
+}
+\end{codegood}
+
+%% ----------------------------------------------------------------------------
+\section{The Module Pattern}
+
+Closures enable the classic module pattern---private state with public interface:
+
+\begin{jscode}
+const UserModule = (function() {
+    // Private
+    let users = [];
+    let nextId = 1;
+
+    function generateId() {
+        return nextId++;
+    }
+
+    // Public API (returned object)
+    return {
+        add(name) {
+            const user = { id: generateId(), name };
+            users.push(user);
+            return user;
+        },
+
+        remove(id) {
+            users = users.filter(u => u.id !== id);
+        },
+
+        getAll() {
+            return [...users];  // Return copy to prevent mutation
+        },
+
+        findById(id) {
+            return users.find(u => u.id === id);
+        }
+    };
+})();  // Immediately invoked!
+
+// Usage
+UserModule.add('Alice');     // { id: 1, name: 'Alice' }
+UserModule.add('Bob');       // { id: 2, name: 'Bob' }
+UserModule.getAll();         // [{ id: 1, ... }, { id: 2, ... }]
+
+// Cannot access internals
+UserModule.users;            // undefined
+UserModule.nextId;           // undefined
+UserModule.generateId;       // undefined
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Common Closure Pitfalls}
+
+\subsection{Pitfall 1: Loop Variables}
+
+\begin{codebad}
+// BROKEN: All handlers log 5
+for (var i = 0; i < 5; i++) {
+    buttons[i].addEventListener('click', function() {
+        console.log(i);  // Always 5!
+    });
+}
+\end{codebad}
+
+\begin{tip}
+Use \code{let} instead of \code{var} to create block-scoped variables that work correctly with closures in loops.
+\end{tip}
+
+\begin{codegood}
+// FIX 1: Use let (block-scoped)
+for (let i = 0; i < 5; i++) {
+    buttons[i].addEventListener('click', function() {
+        console.log(i);  // Correct: 0, 1, 2, 3, 4
+    });
+}
+
+// FIX 2: Create new scope with factory
+for (var i = 0; i < 5; i++) {
+    buttons[i].addEventListener('click', createHandler(i));
+}
+
+function createHandler(index) {
+    return function() {
+        console.log(index);  // Each has its own index
+    };
+}
+
+// FIX 3: IIFE (Immediately Invoked Function Expression)
+for (var i = 0; i < 5; i++) {
+    (function(index) {
+        buttons[index].addEventListener('click', function() {
+            console.log(index);
+        });
+    })(i);
+}
+\end{codegood}
+
+\subsection{Pitfall 2: this Binding in Closures}
+
+\begin{jscode}
+const obj = {
+    name: 'MyObject',
+
+    // BROKEN: Regular function loses this
+    delayedLog() {
+        setTimeout(function() {
+            console.log(this.name);  // undefined! this is window/global
+        }, 1000);
+    },
+
+    // FIX 1: Arrow function (inherits this)
+    delayedLogArrow() {
+        setTimeout(() => {
+            console.log(this.name);  // 'MyObject'
+        }, 1000);
+    },
+
+    // FIX 2: Save this reference
+    delayedLogSaved() {
+        const self = this;
+        setTimeout(function() {
+            console.log(self.name);  // 'MyObject'
+        }, 1000);
+    },
+
+    // FIX 3: Bind
+    delayedLogBound() {
+        setTimeout(function() {
+            console.log(this.name);  // 'MyObject'
+        }.bind(this), 1000);
+    }
+};
+\end{jscode}
+
+\subsection{Pitfall 3: Stale Closures (React)}
+
+\begin{jscode}
+// React example - common bug
+function Counter() {
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            console.log(count);  // Always logs 0!
+            setCount(count + 1); // Always sets to 1!
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, []);  // Empty deps = closure captures initial count (0)
+
+    return <div>{count}</div>;
+}
+
+// FIX: Use functional update
+function CounterFixed() {
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCount(c => c + 1);  // c is always current
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    return <div>{count}</div>;
+}
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+    Function Factory & A function that creates and returns other functions \\
+    Closure & A function that retains access to its outer scope \\
+    Private State & Variables inaccessible from outside, protected by closure \\
+    Module Pattern & IIFE that returns public API, hides private implementation \\
+    Closure Scope & All closures in same function share one context object \\
+}
+
+\begin{keyinsight}
+Closures let you create functions with ``memory''---they remember configuration, accumulate state, and encapsulate private data.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ----------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{4.1: Counter Factory}
+Create a \func{createCounter} factory that returns an object with:
+\begin{itemize}
+    \item \code{increment()} -- increases count by 1, returns new count
+    \item \code{decrement()} -- decreases count by 1, returns new count
+    \item \code{reset()} -- resets to initial value, returns it
+    \item \code{getCount()} -- returns current count
+\end{itemize}
+
+\begin{exercisecode}
+function createCounter(initialValue = 0) {
+    // Your code here
+}
+
+// Usage:
+const counter = createCounter(10);
+counter.increment();  // 11
+counter.increment();  // 12
+counter.decrement();  // 11
+counter.getCount();   // 11
+counter.reset();      // 10
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{4.2: Once Factory}
+Create a \func{once} factory that ensures a function can only be called once:
+
+\begin{exercisecode}
+function once(fn) {
+    // Your code here
+}
+
+// Usage:
+const initialize = once(() => {
+    console.log('Initializing...');
+    return 'initialized';
+});
+
+initialize();  // Logs 'Initializing...', returns 'initialized'
+initialize();  // Does nothing, returns 'initialized' (cached)
+initialize();  // Does nothing, returns 'initialized' (cached)
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{4.3: Debounce Factory}
+Create a \func{debounce} factory that delays function execution until after a wait period of inactivity:
+
+\begin{exercisecode}
+function debounce(fn, waitMs) {
+    // Your code here
+}
+
+// Usage:
+const debouncedSearch = debounce((query) => {
+    console.log('Searching for:', query);
+}, 300);
+
+// Rapid calls
+debouncedSearch('h');
+debouncedSearch('he');
+debouncedSearch('hel');
+debouncedSearch('hell');
+debouncedSearch('hello');
+// Only logs: 'Searching for: hello' (after 300ms of no calls)
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{4.4: Private Stack}
+Create a stack data structure using closures with true private data:
+
+\begin{exercisecode}
+function createStack() {
+    // Your code here
+}
+
+// Usage:
+const stack = createStack();
+stack.push(1);
+stack.push(2);
+stack.push(3);
+stack.peek();    // 3 (doesn't remove)
+stack.pop();     // 3
+stack.pop();     // 2
+stack.size();    // 1
+stack.isEmpty(); // false
+
+// These should not work:
+stack.items;     // undefined (private!)
+\end{exercisecode}
+\end{exercise}
+
+
+%% ============================================================================
+%% CHAPTER 5: COMPOSITION & PIPELINES
+%% ============================================================================
+\chapter{Composition \& Pipelines}
+
+Composition is the art of combining simple functions to build complex behavior. Instead of one large function, you create small, focused functions and connect them.
+
+%% ----------------------------------------------------------------------------
+\section{The Composition Concept}
+
+\subsection{Mathematical Composition}
+
+In math, $f \circ g$ means ``apply g, then apply f'':
+
+\begin{equation*}
+(f \circ g)(x) = f(g(x))
+\end{equation*}
+
+Read right-to-left: first $g$, then $f$.
+
+\subsection{In JavaScript}
+
+\begin{jscode}
+// Two simple functions
+const addOne = x => x + 1;
+const double = x => x * 2;
+
+// Manual composition
+const addOneThenDouble = x => double(addOne(x));
+
+addOneThenDouble(5);  // double(addOne(5)) = double(6) = 12
+\end{jscode}
+
+\subsection{The Problem with Nesting}
+
+As you add more functions, nesting becomes unreadable:
+
+\begin{jscode}
+// Hard to read: inside-out
+const result = format(validate(parse(sanitize(input))));
+
+// What's the order? You have to read inside-out:
+// 1. sanitize
+// 2. parse
+// 3. validate
+// 4. format
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{compose: Right-to-Left Composition}
+
+\code{compose} creates a function that applies functions right-to-left:
+
+\begin{jscode}
+// compose implementation
+const compose = (...fns) => x => fns.reduceRight((acc, fn) => fn(acc), x);
+
+// Usage
+const addOne = x => x + 1;
+const double = x => x * 2;
+const square = x => x * x;
+
+const computed = compose(square, double, addOne);
+// Reads: square after double after addOne
+// Executes: addOne → double → square
+
+computed(5);  // square(double(addOne(5))) = square(double(6)) = square(12) = 144
+\end{jscode}
+
+\subsection{How compose Works}
+
+\begin{jscode}
+const compose = (...fns) => x => fns.reduceRight((acc, fn) => fn(acc), x);
+
+// Let's trace compose(square, double, addOne)(5):
+
+// fns = [square, double, addOne]
+// x = 5
+
+// reduceRight starts from the RIGHT:
+// Step 1: acc=5, fn=addOne → addOne(5) = 6
+// Step 2: acc=6, fn=double → double(6) = 12
+// Step 3: acc=12, fn=square → square(12) = 144
+
+// Result: 144
+\end{jscode}
+
+\begin{note}
+\code{compose} follows mathematical convention---function composition reads right-to-left. This is preferred in academic functional programming.
+\end{note}
+
+%% ----------------------------------------------------------------------------
+\section{pipe: Left-to-Right Composition}
+
+\code{pipe} is the more intuitive version---functions apply left-to-right:
+
+\begin{jscode}
+// pipe implementation
+const pipe = (...fns) => x => fns.reduce((acc, fn) => fn(acc), x);
+
+// Usage
+const addOne = x => x + 1;
+const double = x => x * 2;
+const square = x => x * x;
+
+const computed = pipe(addOne, double, square);
+// Reads: addOne then double then square
+// Executes: addOne → double → square
+
+computed(5);  // 144 (same result, but reads naturally)
+\end{jscode}
+
+\subsection{pipe is the Web Dev Standard}
+
+Most JavaScript libraries and frameworks prefer \code{pipe}:
+\begin{itemize}
+    \item RxJS uses \code{pipe()}
+    \item fp-ts uses \code{pipe()}
+    \item Effect-TS uses \code{pipe()}
+    \item Redux middleware flows left-to-right
+\end{itemize}
+
+Why? It reads like English: ``Do this, then this, then this.''
+
+\begin{jscode}
+// pipe reads top-to-bottom, left-to-right
+const processUser = pipe(
+    validateInput,
+    normalizeEmail,
+    hashPassword,
+    saveToDatabase
+);
+
+// compose reads bottom-to-top, right-to-left
+const processUser = compose(
+    saveToDatabase,
+    hashPassword,
+    normalizeEmail,
+    validateInput
+);
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Building Pipelines}
+
+\subsection{Data Transformation Pipeline}
+
+\begin{jscode}
+const pipe = (...fns) => x => fns.reduce((acc, fn) => fn(acc), x);
+
+// Small, focused functions
+const trim = str => str.trim();
+const toLowerCase = str => str.toLowerCase();
+const replaceSpaces = str => str.replace(/\s+/g, '-');
+const removeSpecialChars = str => str.replace(/[^a-z0-9-]/g, '');
+
+// Combine into pipeline
+const slugify = pipe(
+    trim,
+    toLowerCase,
+    replaceSpaces,
+    removeSpecialChars
+);
+
+slugify('  Hello World! This is a TEST  ');
+// 'hello-world-this-is-a-test'
+\end{jscode}
+
+\subsection{Request Processing Pipeline}
+
+\begin{jscode}
+// Each function transforms the request object
+const addTimestamp = req => ({
+    ...req,
+    timestamp: Date.now()
+});
+
+const validateAuth = req => {
+    if (!req.headers.authorization) {
+        throw new Error('Unauthorized');
+    }
+    return req;
+};
+
+const parseBody = req => ({
+    ...req,
+    body: JSON.parse(req.rawBody)
+});
+
+const sanitizeInput = req => ({
+    ...req,
+    body: {
+        ...req.body,
+        email: req.body.email?.toLowerCase().trim()
+    }
+});
+
+// Pipeline
+const processRequest = pipe(
+    addTimestamp,
+    validateAuth,
+    parseBody,
+    sanitizeInput
+);
+
+// Usage
+const result = processRequest({
+    headers: { authorization: 'Bearer xxx' },
+    rawBody: '{"email": " ALICE@TEST.COM "}'
+});
+\end{jscode}
+
+\subsection{Array Processing Pipeline}
+
+\begin{jscode}
+const users = [
+    { name: 'Alice', age: 25, active: true },
+    { name: 'Bob', age: 17, active: true },
+    { name: 'Charlie', age: 30, active: false },
+    { name: 'Diana', age: 22, active: true }
+];
+
+// Functions that work on arrays
+const filterActive = users => users.filter(u => u.active);
+const filterAdults = users => users.filter(u => u.age >= 18);
+const sortByAge = users => [...users].sort((a, b) => a.age - b.age);
+const extractNames = users => users.map(u => u.name);
+
+// Pipeline
+const getActiveAdultNames = pipe(
+    filterActive,
+    filterAdults,
+    sortByAge,
+    extractNames
+);
+
+getActiveAdultNames(users);  // ['Diana', 'Alice']
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{The tap Utility: Debugging Pipelines}
+
+\code{tap} lets you peek at values without affecting the pipeline:
+
+\begin{jscode}
+const tap = fn => value => {
+    fn(value);
+    return value;  // Pass through unchanged
+};
+
+// Usage: debug a pipeline
+const processData = pipe(
+    filterActive,
+    tap(data => console.log('After filter:', data.length)),
+    sortByAge,
+    tap(data => console.log('After sort:', data)),
+    extractNames,
+    tap(names => console.log('Final:', names))
+);
+\end{jscode}
+
+\subsection{tap Variations}
+
+\begin{jscode}
+// Log with label
+const tapLog = label => tap(x => console.log(label, x));
+
+// Debugger breakpoint
+const tapDebug = tap(() => debugger);
+
+// Conditional tap
+const tapIf = (predicate, fn) => value => {
+    if (predicate(value)) fn(value);
+    return value;
+};
+
+// Usage
+const processData = pipe(
+    filterActive,
+    tapLog('After filter:'),
+    tapIf(arr => arr.length === 0, () => console.warn('No active users!')),
+    sortByAge,
+    extractNames
+);
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Point-Free Style}
+
+Point-free (or tacit) style means defining functions without explicitly mentioning their arguments:
+
+\begin{jscode}
+// Pointed (explicit argument)
+const getLength = str => str.length;
+const isEven = n => n % 2 === 0;
+
+// Point-free
+const getLength = str => str.length;  // Can't really avoid the arg here
+
+// But with composition:
+// Pointed
+const getLengthAndDouble = str => double(str.length);
+
+// Point-free (no mention of str)
+const getLengthAndDouble = pipe(
+    str => str.length,
+    double
+);
+\end{jscode}
+
+\subsection{Point-Free with Higher-Order Utilities}
+
+\begin{jscode}
+// Helper to get property
+const prop = key => obj => obj[key];
+
+// Helper to call method
+const method = (name, ...args) => obj => obj[name](...args);
+
+// Now we can go point-free
+const getName = prop('name');
+const getEmail = prop('email');
+const toUpperCase = method('toUpperCase');
+
+// Point-free pipeline
+const getUpperName = pipe(
+    prop('name'),
+    method('toUpperCase')
+);
+
+getUpperName({ name: 'alice', email: 'a@b.com' });  // 'ALICE'
+\end{jscode}
+
+\subsection{When to Use Point-Free}
+
+\textbf{Good}: Simple, linear transformations
+\begin{codegood}
+// Clear and readable
+const processName = pipe(trim, toLowerCase, capitalize);
+\end{codegood}
+
+\textbf{Bad}: Complex logic or when it hurts readability
+\begin{codebad}
+// This is too clever
+const process = pipe(
+    fork(join, head, tail),
+    converge(multiply, [add(1), subtract(1)])
+);
+\end{codebad}
+
+\begin{codegood}
+// Just write it clearly
+const process = x => {
+    const a = x + 1;
+    const b = x - 1;
+    return a * b;
+};
+\end{codegood}
+
+\begin{tip}
+\textbf{Guideline}: If you have to think hard to understand it, don't use point-free.
+\end{tip}
+
+%% ----------------------------------------------------------------------------
+\section{Composing with Multiple Arguments}
+
+Basic \code{pipe} and \code{compose} work with single-argument functions. For multiple arguments, we need additional techniques (covered in Chapter 6: Currying).
+
+For now, here's a multi-argument compose:
+
+\begin{jscode}
+// First function can take multiple args, rest take one
+const pipeWith = (...fns) => (...args) => {
+    const [first, ...rest] = fns;
+    return rest.reduce((acc, fn) => fn(acc), first(...args));
+};
+
+// Usage
+const add = (a, b) => a + b;
+const double = x => x * 2;
+const square = x => x * x;
+
+const compute = pipeWith(add, double, square);
+compute(2, 3);  // square(double(add(2, 3))) = square(double(5)) = square(10) = 100
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Real-World Composition Patterns}
+
+\subsection{Pattern 1: Validation Pipeline}
+
+\begin{jscode}
+const pipe = (...fns) => x => fns.reduce((acc, fn) => fn(acc), x);
+
+// Each validator returns { valid, value, error }
+const createValidator = (test, errorMsg) => result => {
+    if (!result.valid) return result;  // Short-circuit on first error
+
+    if (!test(result.value)) {
+        return { valid: false, value: result.value, error: errorMsg };
+    }
+    return result;
+};
+
+const notEmpty = createValidator(
+    v => v.trim().length > 0,
+    'Cannot be empty'
+);
+
+const minLength = n => createValidator(
+    v => v.length >= n,
+    `Must be at least ${n} characters`
+);
+
+const hasUppercase = createValidator(
+    v => /[A-Z]/.test(v),
+    'Must contain uppercase letter'
+);
+
+const hasNumber = createValidator(
+    v => /[0-9]/.test(v),
+    'Must contain a number'
+);
+
+// Compose validators
+const validatePassword = pipe(
+    notEmpty,
+    minLength(8),
+    hasUppercase,
+    hasNumber
+);
+
+// Usage
+const result = validatePassword({ valid: true, value: 'weak' });
+// { valid: false, value: 'weak', error: 'Must be at least 8 characters' }
+
+const result2 = validatePassword({ valid: true, value: 'StrongPass1' });
+// { valid: true, value: 'StrongPass1', error: undefined }
+\end{jscode}
+
+\subsection{Pattern 2: Async Pipeline}
+
+\begin{jscode}
+// Async pipe: awaits each step
+const pipeAsync = (...fns) => async x => {
+    let result = x;
+    for (const fn of fns) {
+        result = await fn(result);
+    }
+    return result;
+};
+
+// Usage
+const processUser = pipeAsync(
+    fetchUser,
+    validateUser,
+    enrichWithProfile,
+    saveToCache
+);
+
+const user = await processUser(userId);
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.2\textwidth} >{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.45\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Function} & \textbf{\sffamily Direction} & \textbf{\sffamily Use Case} \\
+    \midrule
+    \code{compose} & Right-to-left ($\rightarrow$) & Mathematical convention, store enhancers \\
+    \code{pipe} & Left-to-right ($\leftarrow$) & Web dev standard, data pipelines \\
+    \code{tap} & Pass-through & Debugging, logging \\
+    \code{flow} & Left-to-right & Same as pipe (Lodash name) \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyinsight}
+Break complex transformations into small, focused functions. Combine them with \code{pipe} for readable, maintainable code.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ----------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{5.1: Build pipe and compose}
+Implement both from scratch:
+
+\begin{exercisecode}
+function pipe(...fns) {
+    // Your code here
+}
+
+function compose(...fns) {
+    // Your code here
+}
+
+// Test
+const add1 = x => x + 1;
+const mult2 = x => x * 2;
+const sub3 = x => x - 3;
+
+pipe(add1, mult2, sub3)(5);     // ((5 + 1) * 2) - 3 = 9
+compose(sub3, mult2, add1)(5);  // Same result: 9
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{5.2: String Processing Pipeline}
+Create a text processing pipeline that:
+\begin{enumerate}
+    \item Trims whitespace
+    \item Converts to lowercase
+    \item Removes punctuation
+    \item Splits into words
+    \item Removes words shorter than 3 characters
+    \item Joins with hyphens
+\end{enumerate}
+
+\begin{exercisecode}
+const processText = pipe(
+    // Your functions here
+);
+
+processText('  Hello, World! This is a TEST...  ');
+// 'hello-world-this-test'
+\end{exercisecode}
+\end{exercise}
+
+
+%% ============================================================================
+%% CHAPTER 6: PARTIAL APPLICATION & CURRYING
+%% ============================================================================
+\chapter{Partial Application \& Currying}
+
+Partial application and currying let you create specialized functions from general ones by pre-filling arguments.
+
+%% ----------------------------------------------------------------------------
+\section{The Problem: Repeated Arguments}
+
+\begin{jscode}
+// You keep passing the same first argument
+fetchFromApi('https://api.github.com', '/users');
+fetchFromApi('https://api.github.com', '/repos');
+fetchFromApi('https://api.github.com', '/gists');
+
+// Or the same configuration
+formatDate(date1, 'YYYY-MM-DD', 'en-US');
+formatDate(date2, 'YYYY-MM-DD', 'en-US');
+formatDate(date3, 'YYYY-MM-DD', 'en-US');
+\end{jscode}
+
+What if you could create a specialized version with some arguments ``locked in''?
+
+%% ----------------------------------------------------------------------------
+\section{Partial Application}
+
+\textbf{Partial application} creates a new function with some arguments pre-filled:
+
+\begin{jscode}
+// General function
+function greet(greeting, name) {
+    return `${greeting}, ${name}!`;
+}
+
+// Partially apply the first argument
+function sayHello(name) {
+    return greet('Hello', name);
+}
+
+function sayHi(name) {
+    return greet('Hi', name);
+}
+
+sayHello('Alice');  // 'Hello, Alice!'
+sayHi('Bob');       // 'Hi, Bob!'
+\end{jscode}
+
+\subsection{Using bind for Partial Application}
+
+JavaScript's \code{bind} can partially apply arguments:
+
+\begin{jscode}
+function greet(greeting, name) {
+    return `${greeting}, ${name}!`;
+}
+
+// bind(thisArg, ...args) - we use null for thisArg
+const sayHello = greet.bind(null, 'Hello');
+const sayGoodbye = greet.bind(null, 'Goodbye');
+
+sayHello('Alice');    // 'Hello, Alice!'
+sayGoodbye('Bob');    // 'Goodbye, Bob!'
+\end{jscode}
+
+\subsection{A Generic partial Function}
+
+\begin{jscode}
+const partial = (fn, ...presetArgs) => {
+    return (...laterArgs) => fn(...presetArgs, ...laterArgs);
+};
+
+// Usage
+function createUser(role, department, name, email) {
+    return { role, department, name, email };
+}
+
+// Create specialized functions
+const createAdmin = partial(createUser, 'admin', 'IT');
+const createEmployee = partial(createUser, 'employee', 'Sales');
+
+createAdmin('Alice', 'alice@test.com');
+// { role: 'admin', department: 'IT', name: 'Alice', email: 'alice@test.com' }
+
+createEmployee('Bob', 'bob@test.com');
+// { role: 'employee', department: 'Sales', name: 'Bob', email: 'bob@test.com' }
+\end{jscode}
+
+\subsection{Web Dev Example: API Client}
+
+\begin{jscode}
+const partial = (fn, ...presetArgs) => (...laterArgs) => fn(...presetArgs, ...laterArgs);
+
+async function apiRequest(baseUrl, method, endpoint, data = null) {
+    const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
+    };
+
+    if (data) options.body = JSON.stringify(data);
+
+    const response = await fetch(`${baseUrl}${endpoint}`, options);
+    return response.json();
+}
+
+// Create specialized functions
+const githubApi = partial(apiRequest, 'https://api.github.com');
+const githubGet = partial(githubApi, 'GET');
+const githubPost = partial(githubApi, 'POST');
+
+// Use them
+const user = await githubGet('/users/octocat');
+const gist = await githubPost('/gists', { files: {...} });
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Currying}
+
+\textbf{Currying} transforms a function that takes multiple arguments into a sequence of functions that each take a single argument:
+
+\begin{jscode}
+// Regular function
+function add(a, b, c) {
+    return a + b + c;
+}
+add(1, 2, 3);  // 6
+
+// Curried version
+function addCurried(a) {
+    return function(b) {
+        return function(c) {
+            return a + b + c;
+        };
+    };
+}
+addCurried(1)(2)(3);  // 6
+\end{jscode}
+
+\subsection{Arrow Function Syntax}
+
+\begin{jscode}
+// Same curried function with arrows
+const addCurried = a => b => c => a + b + c;
+
+addCurried(1)(2)(3);  // 6
+
+// Can call incrementally
+const add1 = addCurried(1);      // b => c => 1 + b + c
+const add1and2 = add1(2);        // c => 1 + 2 + c
+const result = add1and2(3);      // 6
+\end{jscode}
+
+\subsection{The Difference: Partial vs Curry}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.45\textwidth} >{\raggedright\arraybackslash}p{0.45\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Partial Application} & \textbf{\sffamily Currying} \\
+    \midrule
+    Fix some arguments at once & Transform to single-arg chain \\
+    \code{partial(fn, a, b)(c, d)} & \code{curry(fn)(a)(b)(c)(d)} \\
+    Flexible grouping & One arg at a time \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{jscode}
+// Partial: fix multiple args at once
+const partial = (fn, ...args) => (...more) => fn(...args, ...more);
+const add5and6 = partial(add, 5, 6);  // Fix two args
+add5and6(7);  // 18
+
+// Curry: always one at a time
+const addCurried = a => b => c => a + b + c;
+addCurried(5)(6)(7);  // 18
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Auto-Curry: Flexible Currying}
+
+Auto-curry lets you call with any number of arguments:
+
+\begin{jscode}
+function curry(fn) {
+    return function curried(...args) {
+        if (args.length >= fn.length) {
+            // Enough arguments: call the function
+            return fn(...args);
+        } else {
+            // Not enough: return function that collects more
+            return (...more) => curried(...args, ...more);
+        }
+    };
+}
+
+// Usage
+const add = (a, b, c) => a + b + c;
+const curriedAdd = curry(add);
+
+// All of these work:
+curriedAdd(1, 2, 3);    // 6 (all at once)
+curriedAdd(1)(2)(3);    // 6 (one at a time)
+curriedAdd(1, 2)(3);    // 6 (mixed)
+curriedAdd(1)(2, 3);    // 6 (mixed)
+\end{jscode}
+
+\subsection{How Auto-Curry Works}
+
+\begin{jscode}
+function curry(fn) {
+    return function curried(...args) {
+        // fn.length is the number of declared parameters
+        if (args.length >= fn.length) {
+            return fn(...args);  // Call with all args
+        }
+        return (...more) => curried(...args, ...more);  // Collect more
+    };
+}
+
+// Trace curry(add)(1)(2)(3):
+// Call 1: args=[1], 1 < 3, return (...more) => curried(1, ...more)
+// Call 2: args=[1,2], 2 < 3, return (...more) => curried(1, 2, ...more)
+// Call 3: args=[1,2,3], 3 >= 3, return add(1, 2, 3) = 6
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Currying in Practice}
+
+\subsection{Data-Last for Piping}
+
+Curried functions work beautifully with \code{pipe} when data comes last:
+
+\begin{jscode}
+const curry = fn => function curried(...args) {
+    return args.length >= fn.length
+        ? fn(...args)
+        : (...more) => curried(...args, ...more);
+};
+
+// Curried utilities (data-last)
+const map = curry((fn, array) => array.map(fn));
+const filter = curry((predicate, array) => array.filter(predicate));
+const reduce = curry((fn, initial, array) => array.reduce(fn, initial));
+
+// Now they compose beautifully
+const pipe = (...fns) => x => fns.reduce((acc, fn) => fn(acc), x);
+
+const processNumbers = pipe(
+    filter(n => n > 0),           // Keep positives
+    map(n => n * 2),              // Double them
+    reduce((sum, n) => sum + n, 0) // Sum them
+);
+
+processNumbers([-1, 2, -3, 4, 5]);  // (2 + 4 + 5) * 2 = 22
+\end{jscode}
+
+\subsection{Web Dev Example: Validation}
+
+\begin{jscode}
+const curry = fn => (...args) =>
+    args.length >= fn.length ? fn(...args) : curry(fn.bind(null, ...args));
+
+// Validators return { valid, error } or just boolean
+const createRule = curry((test, errorMsg, value) => ({
+    valid: test(value),
+    error: test(value) ? null : errorMsg,
+    value
+}));
+
+const minLength = n => createRule(
+    v => v.length >= n,
+    `Must be at least ${n} characters`
+);
+
+const maxLength = n => createRule(
+    v => v.length <= n,
+    `Must be at most ${n} characters`
+);
+
+const matchesPattern = (regex, msg) => createRule(
+    v => regex.test(v),
+    msg
+);
+
+// Compose validators
+const validateAll = (...validators) => value => {
+    for (const validate of validators) {
+        const result = validate(value);
+        if (!result.valid) return result;
+    }
+    return { valid: true, error: null, value };
+};
+
+const validateUsername = validateAll(
+    minLength(3),
+    maxLength(20),
+    matchesPattern(/^[a-zA-Z0-9_]+$/, 'Only letters, numbers, underscore')
+);
+
+validateUsername('ab');  // { valid: false, error: 'Must be at least 3 characters' }
+validateUsername('alice_123');  // { valid: true, error: null, value: 'alice_123' }
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Partial Application vs Currying: When to Use Each}
+
+\subsection{Use Partial Application When:}
+
+\begin{itemize}
+    \item You want to fix several arguments at once
+    \item Working with existing non-curried functions
+    \item The argument order doesn't match your needs
+\end{itemize}
+
+\begin{jscode}
+// Fix multiple args at once
+const logError = partial(console.log, '[ERROR]', new Date().toISOString());
+logError('Something went wrong');  // [ERROR] 2024-01-15T10:30:00.000Z Something went wrong
+
+// Working with existing functions
+const parseBase10 = partial(parseInt, undefined, 10);
+['1', '2', '3'].map(parseBase10);  // [1, 2, 3] not [1, NaN, NaN]
+\end{jscode}
+
+\subsection{Use Currying When:}
+
+\begin{itemize}
+    \item Building composable utilities
+    \item Creating point-free pipelines
+    \item Designing an API meant for composition
+\end{itemize}
+
+\begin{jscode}
+// Composable utilities
+const add = curry((a, b) => a + b);
+const multiply = curry((a, b) => a * b);
+
+const add5 = add(5);
+const times2 = multiply(2);
+
+const transform = pipe(add5, times2);
+transform(10);  // (10 + 5) * 2 = 30
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Right-to-Left Partial Application}
+
+Sometimes you need to fill arguments from the right:
+
+\begin{jscode}
+const partialRight = (fn, ...presetArgs) => {
+    return (...laterArgs) => fn(...laterArgs, ...presetArgs);
+};
+
+// Example: parseInt has (string, radix) signature
+const parseInt10 = partialRight(parseInt, 10);
+
+['1', '2', '3'].map(parseInt10);  // [1, 2, 3]
+
+// Compare to the problem:
+['1', '2', '3'].map(parseInt);    // [1, NaN, NaN] - radix gets index!
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.3\textwidth} >{\raggedright\arraybackslash}p{0.35\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Technique} & \textbf{\sffamily Definition} & \textbf{\sffamily Use Case} \\
+    \midrule
+    Partial Application & Pre-fill some arguments & Specialize existing functions \\
+    Currying & Transform to single-arg chain & Composable utilities \\
+    Auto-Curry & Flexible argument collection & Best of both worlds \\
+    Data-Last & Data argument comes last & Enables piping \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyinsight}
+Currying and partial application let you build specialized tools from general ones. Combined with \code{pipe}, they enable powerful, readable data transformations.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ----------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{6.1: Implement curry}
+\begin{exercisecode}
+function curry(fn) {
+    // Your code here
+}
+
+// Test
+const add = (a, b, c) => a + b + c;
+const curried = curry(add);
+
+console.log(curried(1)(2)(3));    // 6
+console.log(curried(1, 2)(3));    // 6
+console.log(curried(1)(2, 3));    // 6
+console.log(curried(1, 2, 3));    // 6
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{6.2: Implement partial and partialRight}
+\begin{exercisecode}
+function partial(fn, ...presetArgs) {
+    // Your code here
+}
+
+function partialRight(fn, ...presetArgs) {
+    // Your code here
+}
+
+// Test
+const greet = (greeting, name, punct) => `${greeting}, ${name}${punct}`;
+
+const sayHello = partial(greet, 'Hello');
+console.log(sayHello('Alice', '!'));  // 'Hello, Alice!'
+
+const greetBob = partialRight(greet, 'Bob', '!');
+console.log(greetBob('Hi'));  // 'Hi, Bob!'
+\end{exercisecode}
+\end{exercise}
+
+
+%% ============================================================================
+%% CHAPTER 7: THE PIPELINE INJECTION PROTOCOL
+%% ============================================================================
+\chapter{The Pipeline Injection Protocol}
+
+This chapter presents a systematic algorithm for converting imperative code to functional pipelines. Follow these steps to refactor any loop-based code.
+
+%% ----------------------------------------------------------------------------
+\section{The 4-Phase Protocol}
+
+\begin{phase}{1: Isolate State}
+Identify mutable state that accumulates results.
+\end{phase}
+
+\begin{phase}{2: Extract Predicates}
+Turn \code{if} conditions into named pure functions.
+\end{phase}
+
+\begin{phase}{3: Decouple Transformations}
+Turn mutations into pure transformation functions.
+\end{phase}
+
+\begin{phase}{4: Compose Pipeline}
+Combine using \code{filter}, \code{map}, \code{reduce}.
+\end{phase}
+
+%% ----------------------------------------------------------------------------
+\section{Phase 1: Isolate State}
+
+\textbf{Goal}: Find the mutable variables that accumulate results.
+
+\subsection{Pattern Recognition}
+
+Look for:
+\begin{jscode}
+let result = [];           // Accumulator array
+let total = 0;             // Accumulator number
+let found = null;          // Search result
+let isValid = true;        // Flag
+\end{jscode}
+
+\subsection{Example}
+
+\begin{jscode}
+// BEFORE: Find the state
+function getActiveEmails(users) {
+    const emails = [];  // ← STATE: accumulator
+    for (let i = 0; i < users.length; i++) {
+        if (users[i].isActive) {
+            if (users[i].email) {
+                emails.push(users[i].email.toLowerCase());
+            }
+        }
+    }
+    return emails;
+}
+\end{jscode}
+
+\textbf{Identified State}: \code{emails} array is the accumulator.
+
+\subsection{State Types and Their HOF Equivalents}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.4\textwidth} >{\raggedright\arraybackslash}p{0.5\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily State Pattern} & \textbf{\sffamily HOF Replacement} \\
+    \midrule
+    \code{results.push(item)} & \code{map} or \code{filter} \\
+    \code{total += value} & \code{reduce} \\
+    \code{found = item; break;} & \code{find} \\
+    \code{isValid = false; break;} & \code{some} or \code{every} \\
+    \code{count++} & \code{filter().length} or \code{reduce} \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+%% ----------------------------------------------------------------------------
+\section{Phase 2: Extract Predicates}
+
+\textbf{Goal}: Turn \code{if} conditions into named boolean functions.
+
+\subsection{Pattern Recognition}
+
+Every \code{if (condition)} becomes a predicate:
+
+\begin{jscode}
+// BEFORE
+if (users[i].isActive) { ... }
+if (users[i].email) { ... }
+
+// AFTER
+const isActive = user => user.isActive;
+const hasEmail = user => user.email != null;
+\end{jscode}
+
+\subsection{Example Continued}
+
+\begin{jscode}
+// Extract predicates from the conditions
+const isActive = user => user.isActive;
+const hasEmail = user => user.email != null;
+
+// The loop conditions are now named functions
+\end{jscode}
+
+\subsection{Combining Predicates}
+
+\begin{jscode}
+// Multiple conditions can be combined
+const isActiveWithEmail = user => isActive(user) && hasEmail(user);
+
+// Or kept separate for reusability
+// filter(isActive).filter(hasEmail)
+\end{jscode}
+
+\subsection{Common Predicate Patterns}
+
+\begin{jscode}
+// Null/undefined checks
+const exists = x => x != null;
+const hasProperty = prop => obj => obj[prop] != null;
+
+// Comparisons
+const isGreaterThan = n => x => x > n;
+const isLessThan = n => x => x < n;
+const equals = target => x => x === target;
+
+// String checks
+const startsWith = prefix => str => str.startsWith(prefix);
+const contains = substr => str => str.includes(substr);
+const matchesPattern = regex => str => regex.test(str);
+
+// Object checks
+const hasRole = role => user => user.role === role;
+const isActive = user => user.active === true;
+const belongsTo = dept => emp => emp.department === dept;
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Phase 3: Decouple Transformations}
+
+\textbf{Goal}: Turn mutations into pure functions that return new values.
+
+\subsection{Pattern Recognition}
+
+Look for:
+\begin{jscode}
+item.prop = value;           // Property mutation
+items.push(transform(item)); // Transform + push
+result = process(item);      // Assignment after processing
+\end{jscode}
+
+\subsection{Example Continued}
+
+\begin{jscode}
+// BEFORE (inside loop)
+emails.push(users[i].email.toLowerCase());
+
+// AFTER
+const extractEmail = user => user.email;
+const normalizeEmail = email => email.toLowerCase();
+
+// Or combined:
+const getEmail = user => user.email.toLowerCase();
+\end{jscode}
+
+\subsection{Common Transformation Patterns}
+
+\begin{jscode}
+// Property extraction
+const prop = key => obj => obj[key];
+const props = (...keys) => obj => keys.map(k => obj[k]);
+
+// Object reshaping
+const pick = (...keys) => obj =>
+    keys.reduce((acc, k) => ({ ...acc, [k]: obj[k] }), {});
+
+const omit = (...keys) => obj =>
+    Object.keys(obj)
+        .filter(k => !keys.includes(k))
+        .reduce((acc, k) => ({ ...acc, [k]: obj[k] }), {});
+
+// Value transformations
+const toUpperCase = str => str.toUpperCase();
+const toLowerCase = str => str.toLowerCase();
+const trim = str => str.trim();
+
+// Number transformations
+const add = n => x => x + n;
+const multiply = n => x => x * n;
+const clamp = (min, max) => x => Math.max(min, Math.min(max, x));
+
+// Object transformations
+const withDefaults = defaults => obj => ({ ...defaults, ...obj });
+const rename = (oldKey, newKey) => obj => {
+    const { [oldKey]: value, ...rest } = obj;
+    return { ...rest, [newKey]: value };
+};
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Phase 4: Compose Pipeline}
+
+\textbf{Goal}: Combine predicates and transformations into a pipeline.
+
+\subsection{The Mapping}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.4\textwidth} >{\raggedright\arraybackslash}p{0.5\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Imperative} & \textbf{\sffamily Functional} \\
+    \midrule
+    \code{if (condition)} inside loop & \code{.filter(predicate)} \\
+    \code{transform(item)} & \code{.map(transformer)} \\
+    \code{accumulator += value} & \code{.reduce(fn, initial)} \\
+    \code{if (...) \{ break; \}} & \code{.find(predicate)} \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Example Completed}
+
+\begin{codebad}
+// BEFORE: Imperative
+function getActiveEmails(users) {
+    const emails = [];
+    for (let i = 0; i < users.length; i++) {
+        if (users[i].isActive) {
+            if (users[i].email) {
+                emails.push(users[i].email.toLowerCase());
+            }
+        }
+    }
+    return emails;
+}
+\end{codebad}
+
+\begin{codegood}
+// AFTER: Functional Pipeline
+const isActive = user => user.isActive;
+const hasEmail = user => user.email != null;
+const getEmail = user => user.email.toLowerCase();
+
+function getActiveEmails(users) {
+    return users
+        .filter(isActive)
+        .filter(hasEmail)
+        .map(getEmail);
+}
+
+// Or ultra-concise (but less readable):
+const getActiveEmails = users => users
+    .filter(u => u.isActive && u.email)
+    .map(u => u.email.toLowerCase());
+\end{codegood}
+
+%% ----------------------------------------------------------------------------
+\section{Complete Worked Examples}
+
+\subsection{Example 1: Sum of Squares of Evens}
+
+\begin{codebad}
+// BEFORE: Imperative
+function sumOfSquaresOfEvens(numbers) {
+    let sum = 0;  // STATE
+    for (let i = 0; i < numbers.length; i++) {
+        if (numbers[i] % 2 === 0) {  // PREDICATE
+            sum += numbers[i] * numbers[i];  // TRANSFORM + ACCUMULATE
+        }
+    }
+    return sum;
+}
+\end{codebad}
+
+\begin{codegood}
+// PHASE 1: State = sum (accumulator) → reduce
+// PHASE 2: Predicate = isEven
+// PHASE 3: Transform = square
+// PHASE 4: Compose
+
+const isEven = n => n % 2 === 0;
+const square = n => n * n;
+
+function sumOfSquaresOfEvens(numbers) {
+    return numbers
+        .filter(isEven)
+        .map(square)
+        .reduce((sum, n) => sum + n, 0);
+}
+
+// Test
+sumOfSquaresOfEvens([1, 2, 3, 4, 5, 6]);  // 4 + 16 + 36 = 56
+\end{codegood}
+
+\subsection{Example 2: Find First Admin}
+
+\begin{codebad}
+// BEFORE: Imperative
+function findFirstAdmin(users) {
+    let admin = null;  // STATE: search result
+    for (let i = 0; i < users.length; i++) {
+        if (users[i].role === 'admin') {  // PREDICATE
+            admin = users[i];  // Found!
+            break;  // Early exit
+        }
+    }
+    return admin;
+}
+\end{codebad}
+
+\begin{codegood}
+// Early exit + single result → find
+
+const isAdmin = user => user.role === 'admin';
+
+function findFirstAdmin(users) {
+    return users.find(isAdmin);
+}
+\end{codegood}
+
+\subsection{Example 3: Validate All Fields}
+
+\begin{codebad}
+// BEFORE: Imperative
+function validateForm(fields) {
+    let isValid = true;  // STATE: flag
+    const errors = [];
+    for (let i = 0; i < fields.length; i++) {
+        if (fields[i].required && !fields[i].value) {  // PREDICATE
+            isValid = false;
+            errors.push(`${fields[i].name} is required`);
+        }
+    }
+    return { isValid, errors };
+}
+\end{codebad}
+
+\begin{codegood}
+// Multiple concerns: validation check + error collection
+
+const isRequiredAndEmpty = field => field.required && !field.value;
+const toErrorMessage = field => `${field.name} is required`;
+
+function validateForm(fields) {
+    const invalidFields = fields.filter(isRequiredAndEmpty);
+    return {
+        isValid: invalidFields.length === 0,
+        errors: invalidFields.map(toErrorMessage)
+    };
+}
+\end{codegood}
+
+\subsection{Example 4: Group By Category}
+
+\begin{codebad}
+// BEFORE: Imperative
+function groupByCategory(products) {
+    const groups = {};  // STATE: object accumulator
+    for (let i = 0; i < products.length; i++) {
+        const category = products[i].category;  // TRANSFORM (extract)
+        if (!groups[category]) {
+            groups[category] = [];
+        }
+        groups[category].push(products[i]);  // ACCUMULATE
+    }
+    return groups;
+}
+\end{codebad}
+
+\begin{codegood}
+// Object accumulator → reduce
+
+function groupByCategory(products) {
+    return products.reduce((groups, product) => {
+        const category = product.category;
+        return {
+            ...groups,
+            [category]: [...(groups[category] || []), product]
+        };
+    }, {});
+}
+
+// More efficient version (mutation in reduce is OK):
+function groupByCategory(products) {
+    return products.reduce((groups, product) => {
+        const category = product.category;
+        if (!groups[category]) groups[category] = [];
+        groups[category].push(product);
+        return groups;
+    }, {});
+}
+\end{codegood}
+
+\subsection{Example 5: Nested Loop Flattening}
+
+\begin{codebad}
+// BEFORE: Imperative (nested loops)
+function getAllActiveMembers(teams) {
+    const activeMembers = [];
+    for (let i = 0; i < teams.length; i++) {
+        for (let j = 0; j < teams[i].members.length; j++) {
+            if (teams[i].members[j].active) {
+                activeMembers.push(teams[i].members[j]);
+            }
+        }
+    }
+    return activeMembers;
+}
+\end{codebad}
+
+\begin{codegood}
+// Nested loop accessing child array → flatMap
+
+const isActive = member => member.active;
+const getMembers = team => team.members;
+
+function getAllActiveMembers(teams) {
+    return teams
+        .flatMap(getMembers)
+        .filter(isActive);
+}
+\end{codegood}
+
+%% ----------------------------------------------------------------------------
+\section{Decision Flowchart}
+
+\begin{asciibox}
+START: Analyze the loop
+│
+├── Does it build an array?
+│   ├── By filtering items? → filter()
+│   ├── By transforming items? → map()
+│   └── By both? → filter().map() or flatMap()
+│
+├── Does it build an object?
+│   ├── Key-value lookup? → reduce() to object
+│   ├── Grouping? → reduce() with array values
+│   └── Counting? → reduce() with number values
+│
+├── Does it calculate a single value?
+│   └── reduce()
+│
+├── Does it search for one item?
+│   ├── Need the item? → find()
+│   └── Need the index? → findIndex()
+│
+├── Does it check a condition?
+│   ├── "Does any match?" → some()
+│   └── "Do all match?" → every()
+│
+└── Does it have nested loops?
+    └── flatMap() for the inner arrays
+\end{asciibox}
+
+%% ----------------------------------------------------------------------------
+\section{Anti-Patterns to Avoid}
+
+\subsection{Anti-Pattern 1: Reduce-Spread (O(n²))}
+
+\begin{codebad}
+// BAD: Creates new object on every iteration
+const byId = items.reduce((acc, item) => ({
+    ...acc,
+    [item.id]: item
+}), {});
+\end{codebad}
+
+\begin{codegood}
+// GOOD: Mutate accumulator (OK in reduce)
+const byId = items.reduce((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+}, {});
+
+// ALSO GOOD: Use Object.fromEntries
+const byId = Object.fromEntries(
+    items.map(item => [item.id, item])
+);
+\end{codegood}
+
+\subsection{Anti-Pattern 2: Filter Then Length}
+
+\begin{codebad}
+// BAD: Creates intermediate array just to count
+const count = items.filter(x => x.active).length;
+\end{codebad}
+
+\begin{codegood}
+// GOOD: Use reduce to count directly
+const count = items.reduce((n, x) => x.active ? n + 1 : n, 0);
+
+// ALSO GOOD: If you need the items too, filter is fine
+const activeItems = items.filter(x => x.active);
+const count = activeItems.length;
+\end{codegood}
+
+\subsection{Anti-Pattern 3: Map for Side Effects}
+
+\begin{codebad}
+// BAD: Using map for side effects (returns unused array)
+users.map(user => {
+    sendEmail(user);  // Side effect!
+});
+\end{codebad}
+
+\begin{codegood}
+// GOOD: Use forEach for side effects
+users.forEach(user => {
+    sendEmail(user);
+});
+
+// ALSO GOOD: for...of loop
+for (const user of users) {
+    sendEmail(user);
+}
+\end{codegood}
+
+%% ----------------------------------------------------------------------------
+\section{When NOT to Convert}
+
+Sometimes imperative is better:
+
+\subsection{1. Performance-Critical Code}
+
+\begin{jscode}
+// Array methods have overhead. For millions of items:
+// Imperative
+let sum = 0;
+for (let i = 0; i < hugeArray.length; i++) {
+    sum += hugeArray[i];
+}
+
+// May be faster than:
+const sum = hugeArray.reduce((a, b) => a + b, 0);
+\end{jscode}
+
+\subsection{2. Complex Control Flow}
+
+\begin{jscode}
+// Hard to express functionally
+for (let i = 0; i < items.length; i++) {
+    if (condition1) {
+        doA();
+        continue;
+    }
+    if (condition2) {
+        doB();
+        if (condition3) break;
+    }
+    doC();
+}
+\end{jscode}
+
+\subsection{3. Early Exit on Find}
+
+\begin{jscode}
+// find() is good, but for complex exit logic:
+for (const item of items) {
+    const result = complexOperation(item);
+    if (result.success) {
+        return result;  // Complex early return
+    }
+    if (result.fatal) {
+        throw new Error(result.message);
+    }
+}
+\end{jscode}
+
+\subsection{4. Mutation is Intentional}
+
+\begin{jscode}
+// When you actually need to modify in place
+for (const item of items) {
+    item.processed = true;
+    item.timestamp = Date.now();
+}
+\end{jscode}
+
+%% ----------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\subsection{The 4-Phase Protocol}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.1\textwidth} >{\raggedright\arraybackslash}p{0.3\textwidth} >{\raggedright\arraybackslash}p{0.5\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Phase} & \textbf{\sffamily Action} & \textbf{\sffamily Look For} \\
+    \midrule
+    1 & Isolate State & \code{let result = []}, \code{let sum = 0} \\
+    2 & Extract Predicates & \code{if (condition)} \\
+    3 & Decouple Transforms & \code{item.x = y}, \code{push(transform(x))} \\
+    4 & Compose Pipeline & \code{filter}, \code{map}, \code{reduce} \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Quick Reference}
+
+\patterntable{
+    Loop + if + push & \code{filter} \\
+    Loop + transform + push & \code{map} \\
+    Loop + accumulate value & \code{reduce} \\
+    Nested loops & \code{flatMap} \\
+    Loop + break on find & \code{find} / \code{findIndex} \\
+    Loop + flag check & \code{some} / \code{every} \\
+}
+
+\begin{keyinsight}
+Most loops follow predictable patterns. Recognize the pattern, apply the corresponding HOF, and your code becomes more declarative and maintainable.
+\end{keyinsight}
+\end{chaptersummary}
+
+%% ----------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{7.1: Refactor to Pipeline}
+Convert this imperative code:
+
+\begin{exercisecode}
+function processOrders(orders) {
+    const result = [];
+    for (let i = 0; i < orders.length; i++) {
+        if (orders[i].status === 'completed') {
+            if (orders[i].total > 100) {
+                result.push({
+                    id: orders[i].id,
+                    total: orders[i].total,
+                    discountedTotal: orders[i].total * 0.9
+                });
+            }
+        }
+    }
+    return result;
+}
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{7.2: Nested Loop Refactoring}
+Convert this:
+
+\begin{exercisecode}
+function getSkillsFromTeams(teams) {
+    const skills = [];
+    for (let i = 0; i < teams.length; i++) {
+        for (let j = 0; j < teams[i].members.length; j++) {
+            for (let k = 0; k < teams[i].members[j].skills.length; k++) {
+                if (!skills.includes(teams[i].members[j].skills[k])) {
+                    skills.push(teams[i].members[j].skills[k]);
+                }
+            }
+        }
+    }
+    return skills;
+}
+\end{exercisecode}
+\end{exercise}
+
+
+%% ============================================================================
+%% PART II SUMMARY
+%% ============================================================================
+\chapter*{Part II Summary}
+\addcontentsline{toc}{chapter}{Part II Summary}
+
+You now have intermediate techniques:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.3\textwidth} >{\raggedright\arraybackslash}p{0.6\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Concept} & \textbf{\sffamily What You Learned} \\
+    \midrule
+    Function Factories & Create specialized functions from configuration \\
+    Closures & Functions that remember their scope \\
+    Private State & True encapsulation via closures \\
+    compose/pipe & Combine functions into pipelines \\
+    tap & Debug without breaking the pipeline \\
+    Partial Application & Pre-fill some arguments \\
+    Currying & Transform to single-argument chain \\
+    Pipeline Protocol & Systematic imperative-to-functional conversion \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\section*{What's Next}
+
+In \textbf{Part III: Real-World Web Development}, you'll apply these patterns to:
+\begin{itemize}
+    \item Async JavaScript and Promises (Chapter 8)
+    \item React hooks and components (Chapter 9)
+    \item State management with Redux (Chapter 10)
+    \item Node.js middleware and APIs (Chapter 11)
+\end{itemize}
+
+%% ============================================================================
+%% BACKMATTER
+%% ============================================================================
+\backmatter
+
+\printindex
+
+\end{document}

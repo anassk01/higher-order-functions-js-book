@@ -1,0 +1,37 @@
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.bbl
+*.blg
+*.idx
+*.ilg
+*.ind
+*.lof
+*.lot
+*.bcf
+*.run.xml
+*.listing
+
+# PDF output (uncomment if you want to track PDFs)
+*.pdf
+
+# Temporary Claude files
+tmpclaude-*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+*~
+*.swp
+*.swo

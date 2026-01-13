@@ -1,0 +1,348 @@
+%% template.tex
+%% Main template file for HOF book parts
+%% Compile with: lualatex --shell-escape template.tex
+%%
+\documentclass{hofbook}
+
+%% Load custom packages
+\usepackage{hofcode}
+\usepackage{hofvisual}
+
+%% ============================================================================
+%% DOCUMENT METADATA
+%% ============================================================================
+\title{Higher-Order Functions in JavaScript}
+\booksubtitle{A Comprehensive Guide}
+\author{Your Name}
+\date{\today}
+\bookversion{1.0}
+
+%% ============================================================================
+%% BEGIN DOCUMENT
+%% ============================================================================
+\begin{document}
+
+%% --- Title Page ---
+\maketitle
+
+%% --- Table of Contents ---
+\frontmatter
+\tableofcontents
+
+%% ============================================================================
+%% MAIN CONTENT
+%% ============================================================================
+\mainmatter
+
+%% Include your parts here:
+%% \input{part1}
+%% \input{part2}
+%% etc.
+
+%% ============================================================================
+%% EXAMPLE CONTENT (Remove after testing)
+%% ============================================================================
+
+\partdivider{II}{Patterns \& Techniques}
+
+\chapter{Function Factories \& Closures}
+
+Function factories are HOFs that create and return new functions. They're the foundation of many powerful patterns in JavaScript---from event handlers to middleware to React hooks.
+
+\section{The Factory Pattern}
+
+A function factory creates specialized functions based on configuration:
+
+\begin{jscode}
+// Factory: creates greeting functions
+function createGreeter(greeting) {
+    return function(name) {
+        return `${greeting}, ${name}!`;
+    };
+}
+
+// Create specialized greeters
+const sayHello = createGreeter('Hello');
+const sayHi = createGreeter('Hi');
+const sayHey = createGreeter('Hey');
+
+// Use them
+sayHello('Alice');  // 'Hello, Alice!'
+sayHi('Bob');       // 'Hi, Bob!'
+sayHey('Charlie');  // 'Hey, Charlie!'
+\end{jscode}
+
+\subsection{Why This Matters}
+
+Instead of writing repetitive code:
+
+\begin{codebad}
+// Without factory: repetitive, coupled code
+function greetWithHello(name) { return `Hello, ${name}!`; }
+function greetWithHi(name) { return `Hi, ${name}!`; }
+function greetWithHey(name) { return `Hey, ${name}!`; }
+\end{codebad}
+
+You get configurable, DRY code:
+
+\begin{codegood}
+// With factory: configurable, DRY
+const sayHello = createGreeter('Hello');
+const sayHi = createGreeter('Hi');
+const sayHey = createGreeter('Hey');
+\end{codegood}
+
+\section{Understanding Closures}
+
+\begin{definition}{Closure}
+A \concept{closure} is a function that ``remembers'' variables from its outer scope, even after that outer function has finished executing.
+\end{definition}
+
+\begin{jscode}
+function outer() {
+    const secret = 'I am hidden';  // Local variable
+
+    function inner() {
+        console.log(secret);  // Inner function accesses outer's variable
+    }
+
+    return inner;  // Return the inner function
+}
+
+const myFunction = outer();  // outer() runs and returns inner
+// At this point, outer() is done executing
+// But...
+
+myFunction();  // 'I am hidden' -- inner still has access to secret!
+\end{jscode}
+
+\begin{note}
+The closure ``closes over'' the variable \code{secret}, keeping it alive in memory even after \func{outer()} has returned.
+\end{note}
+
+\subsection{Visualizing Closure}
+
+\begin{asciibox}
++---------------------------------------------+
+|  outer() Scope                              |
+|  +----------------------------------------+ |
+|  |  secret = 'I am hidden'                | |
+|  |                                        | |
+|  |  +----------------------------------+  | |
+|  |  |  inner() Scope                   |  | |
+|  |  |  * Has access to: secret         |  | |
+|  |  |  * This access persists          |  | |
+|  |  +----------------------------------+  | |
+|  +----------------------------------------+ |
++---------------------------------------------+
+
+After outer() returns:
+- outer's scope would normally be garbage collected
+- But inner() still references secret
+- So the binding is preserved (the closure)
+\end{asciibox}
+
+\section{Private State with Closures}
+
+Closures let you create truly private data---inaccessible from outside:
+
+\begin{jscodewithtitle}{Bank Account with Private Balance}
+function createBankAccount(initialBalance) {
+    let balance = initialBalance;  // Private!
+
+    return {
+        deposit(amount) {
+            if (amount > 0) {
+                balance += amount;
+                return balance;
+            }
+            throw new Error('Deposit amount must be positive');
+        },
+
+        withdraw(amount) {
+            if (amount > 0 && amount <= balance) {
+                balance -= amount;
+                return balance;
+            }
+            throw new Error('Invalid withdrawal');
+        },
+
+        getBalance() {
+            return balance;
+        }
+    };
+}
+\end{jscodewithtitle}
+
+\begin{keyinsight}
+This is \textbf{real} privacy---not convention (like \code{\_balance}), not symbols, actual inaccessibility. The \code{balance} variable cannot be accessed from outside the closure.
+\end{keyinsight}
+
+\section{Practical Factory Patterns}
+
+\subsection{Pattern 1: Configured API Fetchers}
+
+\begin{jscode}
+function createApiClient(baseUrl, defaultHeaders = {}) {
+    return {
+        async get(endpoint) {
+            const response = await fetch(`${baseUrl}${endpoint}`, {
+                method: 'GET',
+                headers: defaultHeaders
+            });
+            return response.json();
+        },
+
+        async post(endpoint, data) {
+            const response = await fetch(`${baseUrl}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...defaultHeaders
+                },
+                body: JSON.stringify(data)
+            });
+            return response.json();
+        }
+    };
+}
+
+// Create clients for different APIs
+const github = createApiClient('https://api.github.com', {
+    'Authorization': 'token xxx'
+});
+
+const myApi = createApiClient('https://api.myapp.com', {
+    'X-API-Key': 'my-key'
+});
+\end{jscode}
+
+\subsection{Pattern 2: Memoization Factory}
+
+\begin{jscode}
+function createMemoized(fn) {
+    const cache = new Map();
+
+    return function(...args) {
+        const key = JSON.stringify(args);
+
+        if (cache.has(key)) {
+            console.log('Cache hit for:', key);
+            return cache.get(key);
+        }
+
+        console.log('Cache miss for:', key);
+        const result = fn(...args);
+        cache.set(key, result);
+        return result;
+    };
+}
+
+// Memoized Fibonacci
+const fastFib = createMemoized(function(n) {
+    if (n <= 1) return n;
+    return fastFib(n - 1) + fastFib(n - 2);
+});
+
+fastFib(40);  // Fast! Uses cache for repeated calculations
+\end{jscode}
+
+\begin{warning}
+Closures keep references alive. Be careful not to accidentally retain large objects in memory. See Section~\ref{sec:closure-memory} for memory considerations.
+\end{warning}
+
+\section{Common Closure Pitfalls}
+
+\subsection{Pitfall 1: Loop Variables}
+
+\begin{codebad}
+// BROKEN: All handlers log 5
+for (var i = 0; i < 5; i++) {
+    buttons[i].addEventListener('click', function() {
+        console.log(i);  // Always 5!
+    });
+}
+\end{codebad}
+
+\begin{tip}
+Use \code{let} instead of \code{var} to create block-scoped variables that work correctly with closures in loops.
+\end{tip}
+
+\begin{codegood}
+// FIX: Use let (block-scoped)
+for (let i = 0; i < 5; i++) {
+    buttons[i].addEventListener('click', function() {
+        console.log(i);  // Correct: 0, 1, 2, 3, 4
+    });
+}
+\end{codegood}
+
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+    Function Factory & A function that creates and returns other functions \\
+    Closure & A function that retains access to its outer scope \\
+    Private State & Variables inaccessible from outside, protected by closure \\
+    Module Pattern & IIFE that returns public API, hides private implementation \\
+    Closure Scope & All closures in same function share one context object \\
+}
+
+\begin{keyinsight}
+Closures let you create functions with ``memory''---they remember configuration, accumulate state, and encapsulate private data.
+\end{keyinsight}
+\end{chaptersummary}
+
+\section{Practice Exercises}
+
+\begin{exercise}{4.1: Counter Factory}
+Create a \func{createCounter} factory that returns an object with:
+\begin{itemize}
+    \item \code{increment()} -- increases count by 1, returns new count
+    \item \code{decrement()} -- decreases count by 1, returns new count
+    \item \code{reset()} -- resets to initial value, returns it
+    \item \code{getCount()} -- returns current count
+\end{itemize}
+
+\begin{exercisecode}
+function createCounter(initialValue = 0) {
+    // Your code here
+}
+
+// Usage:
+const counter = createCounter(10);
+counter.increment();  // 11
+counter.increment();  // 12
+counter.decrement();  // 11
+counter.getCount();   // 11
+counter.reset();      // 10
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{4.2: Once Factory}
+Create a \func{once} factory that ensures a function can only be called once:
+
+\begin{exercisecode}
+function once(fn) {
+    // Your code here
+}
+
+// Usage:
+const initialize = once(() => {
+    console.log('Initializing...');
+    return 'initialized';
+});
+
+initialize();  // Logs 'Initializing...', returns 'initialized'
+initialize();  // Does nothing, returns 'initialized' (cached)
+\end{exercisecode}
+\end{exercise}
+
+%% ============================================================================
+%% BACKMATTER
+%% ============================================================================
+\backmatter
+
+\printindex
+
+\end{document}

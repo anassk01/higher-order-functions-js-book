@@ -1,0 +1,1958 @@
+%% part1_foundations.tex
+%% Part I: Foundations - Higher-Order Functions in JavaScript
+%% Compile with: lualatex --shell-escape main.tex
+%%
+
+%% ============================================================================
+%% PART I: FOUNDATIONS
+%% ============================================================================
+
+\partdivider{I}{Foundations}
+
+%% ============================================================================
+%% CHAPTER 1: WHAT ARE HIGHER-ORDER FUNCTIONS?
+%% ============================================================================
+
+\chapter{What Are Higher-Order Functions?}
+
+\chapterquote{Functions are first-class citizens in JavaScript---they can go anywhere any other value can go.}{Douglas Crockford}
+
+\section{The Big Idea}
+
+In JavaScript, functions are \concept{first-class citizens}. This means functions can be:
+
+\begin{itemize}
+    \item Stored in variables
+    \item Passed as arguments to other functions
+    \item Returned from other functions
+    \item Stored in data structures
+\end{itemize}
+
+\begin{definition}{Higher-Order Function}
+A \concept{Higher-Order Function (HOF)} is a function that does at least one of these:
+\begin{enumerate}
+    \item Takes one or more functions as arguments
+    \item Returns a function as its result
+\end{enumerate}
+That's it. No magic, no complex theory. Just functions working with functions.
+\end{definition}
+
+%% ---------------------------------------------------------------------------
+\section{Functions as Values}
+
+Before we dive into HOFs, let's cement the foundation: functions are values, just like numbers or strings.
+
+\begin{jscode}
+// A number stored in a variable
+const age = 25;
+
+// A string stored in a variable
+const name = "Alice";
+
+// A function stored in a variable
+const greet = function(person) {
+    return `Hello, ${person}!`;
+};
+
+// All three are just values
+console.log(age);        // 25
+console.log(name);       // Alice
+console.log(greet);      // [Function: greet]
+console.log(greet(name)); // Hello, Alice!
+\end{jscode}
+
+\begin{keyinsight}
+The function \code{greet} is not special---it's a value that happens to be callable.
+\end{keyinsight}
+
+\subsection{Arrow Functions: The Modern Syntax}
+
+\begin{jscode}
+// Traditional function expression
+const add = function(a, b) {
+    return a + b;
+};
+
+// Arrow function (equivalent)
+const addArrow = (a, b) => a + b;
+
+// Single parameter: parentheses optional
+const double = x => x * 2;
+
+// No parameters: empty parentheses required
+const sayHi = () => "Hi!";
+\end{jscode}
+
+\begin{note}
+Arrow functions are not just shorter syntax---they also don't have their own \code{this} binding, which matters in web development (we'll cover this in Chapter 9).
+\end{note}
+
+%% ---------------------------------------------------------------------------
+\section{Functions That Take Functions}
+
+The most common HOF pattern: passing a function as an argument.
+
+\subsection{The Callback Pattern}
+
+\begin{jscode}
+// A higher-order function: takes a function as argument
+function processUser(user, callback) {
+    // Do some processing
+    const processed = {
+        ...user,
+        processedAt: Date.now()
+    };
+
+    // Call the passed-in function with the result
+    callback(processed);
+}
+
+// Usage: we pass a function as the second argument
+processUser({ name: "Bob" }, function(result) {
+    console.log(result);
+});
+
+// With arrow function (cleaner)
+processUser({ name: "Bob" }, result => console.log(result));
+\end{jscode}
+
+\begin{tip}
+\textbf{Why is \func{processUser} a higher-order function?} Because it takes \code{callback} as a parameter, and \code{callback} is a function.
+\end{tip}
+
+\subsection{Real Web Dev Example: Event Handlers}
+
+Every time you add an event listener, you're using a higher-order function:
+
+\begin{jscode}
+// addEventListener is a HOF--it takes a function as its second argument
+button.addEventListener('click', function(event) {
+    console.log('Button clicked!');
+});
+
+// With arrow function
+button.addEventListener('click', (event) => {
+    console.log('Button clicked!');
+});
+
+// Or pass a named function
+function handleClick(event) {
+    console.log('Button clicked!');
+}
+button.addEventListener('click', handleClick);
+\end{jscode}
+
+\begin{note}
+\func{addEventListener} doesn't know or care what your function does---it just knows to call it when the event occurs.
+\end{note}
+
+%% ---------------------------------------------------------------------------
+\section{Functions That Return Functions}
+
+The second HOF pattern: a function that creates and returns another function.
+
+\subsection{The Factory Pattern}
+
+\begin{jscode}
+// A function that returns a function
+function createMultiplier(factor) {
+    // This inner function is returned
+    return function(number) {
+        return number * factor;
+    };
+}
+
+// Create specific multiplier functions
+const double = createMultiplier(2);
+const triple = createMultiplier(3);
+const tenX = createMultiplier(10);
+
+// Use them
+console.log(double(5));  // 10
+console.log(triple(5));  // 15
+console.log(tenX(5));    // 50
+\end{jscode}
+
+\begin{steps}
+    \item \func{createMultiplier(2)} runs and returns a new function
+    \item That returned function ``remembers'' that \code{factor} is \code{2}
+    \item We store that function in \code{double}
+    \item When we call \code{double(5)}, it multiplies \code{5 * 2}
+\end{steps}
+
+\begin{keyinsight}
+This ``remembering'' is called a \concept{closure}---the inner function closes over the variable \code{factor} from its outer scope.
+\end{keyinsight}
+
+\subsection{With Arrow Functions}
+
+\begin{jscode}
+// Same thing, more concise
+const createMultiplier = factor => number => number * factor;
+
+// Reading this:
+// createMultiplier is a function that takes `factor`
+// and returns a function that takes `number`
+// and returns `number * factor`
+
+const double = createMultiplier(2);
+console.log(double(5)); // 10
+\end{jscode}
+
+\subsection{Real Web Dev Example: Configured Functions}
+
+\begin{jscodewithtitle}{API Fetcher Factory}
+// Create a fetcher for a specific API
+function createApiFetcher(baseUrl) {
+    return function(endpoint) {
+        return fetch(`${baseUrl}${endpoint}`)
+            .then(response => response.json());
+    };
+}
+
+// Create fetchers for different APIs
+const githubApi = createApiFetcher('https://api.github.com');
+const myApi = createApiFetcher('https://api.myapp.com');
+
+// Use them
+githubApi('/users/octocat').then(data => console.log(data));
+myApi('/products').then(data => console.log(data));
+\end{jscodewithtitle}
+
+%% ---------------------------------------------------------------------------
+\section{Both Patterns Combined}
+
+Many HOFs both take AND return functions:
+
+\begin{jscode}
+// Takes a function, returns a function
+function withLogging(fn) {
+    return function(...args) {
+        console.log(`Calling with args:`, args);
+        const result = fn(...args);
+        console.log(`Result:`, result);
+        return result;
+    };
+}
+
+// Original function
+const add = (a, b) => a + b;
+
+// Enhanced function
+const addWithLogging = withLogging(add);
+
+addWithLogging(2, 3);
+// Logs: Calling with args: [2, 3]
+// Logs: Result: 5
+// Returns: 5
+\end{jscode}
+
+\begin{keyinsight}
+This pattern---wrapping a function to add behavior---is foundational to middleware, decorators, and much of web development.
+\end{keyinsight}
+
+%% ---------------------------------------------------------------------------
+\section{Mental Model: Functions as Values}
+
+Here's the mental shift that makes HOFs intuitive:
+
+\textbf{Think of functions like you think of objects.}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.45\textwidth} >{\raggedright\arraybackslash}p{0.45\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily With Objects} & \textbf{\sffamily With Functions} \\
+    \midrule
+    \code{const user = \{ name: "Bob" \}} & \code{const greet = () => "Hi"} \\
+    \code{doSomething(user)} & \code{doSomething(greet)} \\
+    \code{return user} & \code{return greet} \\
+    \code{users.push(user)} & \code{handlers.push(greet)} \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{tip}
+When someone says ``pass a function,'' think ``pass a value that happens to be callable.''
+\end{tip}
+
+%% ---------------------------------------------------------------------------
+\section{Why Higher-Order Functions Matter in Web Dev}
+
+\subsection{Problem: Repetitive Patterns}
+
+\begin{codebad}
+// Without HOFs: repetitive code
+const numbers = [1, 2, 3, 4, 5];
+
+// Double each number
+const doubled = [];
+for (let i = 0; i < numbers.length; i++) {
+    doubled.push(numbers[i] * 2);
+}
+
+// Triple each number
+const tripled = [];
+for (let i = 0; i < numbers.length; i++) {
+    tripled.push(numbers[i] * 3);
+}
+
+// Get string versions
+const strings = [];
+for (let i = 0; i < numbers.length; i++) {
+    strings.push(String(numbers[i]));
+}
+\end{codebad}
+
+\subsection{Solution: Abstract the Pattern}
+
+\begin{codegood}
+// With HOFs: the pattern is abstracted
+const numbers = [1, 2, 3, 4, 5];
+
+const doubled = numbers.map(n => n * 2);
+const tripled = numbers.map(n => n * 3);
+const strings = numbers.map(n => String(n));
+\end{codegood}
+
+\begin{keyinsight}
+\func{map} is a HOF that abstracts ``do something to each element.'' We just tell it \emph{what} to do.
+\end{keyinsight}
+
+%% ---------------------------------------------------------------------------
+\section{The Three Questions}
+
+When you see a function, ask:
+
+\begin{enumerate}
+    \item \textbf{Does it take a function as an argument?} $\rightarrow$ It's a HOF
+    \item \textbf{Does it return a function?} $\rightarrow$ It's a HOF
+    \item \textbf{Does it do both?} $\rightarrow$ It's a HOF
+\end{enumerate}
+
+\begin{jscode}
+// Takes function: YES (the callback)
+// Returns function: NO
+array.forEach(callback);
+
+// Takes function: NO
+// Returns function: YES
+function createHandler() {
+    return () => console.log('handled');
+}
+
+// Takes function: YES (fn)
+// Returns function: YES (the wrapper)
+function memoize(fn) {
+    const cache = {};
+    return (arg) => {
+        if (!(arg in cache)) {
+            cache[arg] = fn(arg);
+        }
+        return cache[arg];
+    };
+}
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{1.1: Identify the HOFs}
+Which of these are higher-order functions? Why?
+
+\begin{exercisecode}
+// A
+function add(a, b) {
+    return a + b;
+}
+
+// B
+function runTwice(fn) {
+    fn();
+    fn();
+}
+
+// C
+const numbers = [1, 2, 3];
+numbers.push(4);
+
+// D
+function createCounter() {
+    let count = 0;
+    return function() {
+        return ++count;
+    };
+}
+
+// E
+setTimeout(function() {
+    console.log('delayed');
+}, 1000);
+\end{exercisecode}
+
+\textbf{Answers:}
+\begin{itemize}
+    \item \textbf{A:} Not a HOF (doesn't take or return functions)
+    \item \textbf{B:} HOF (takes a function as argument)
+    \item \textbf{C:} Not a HOF (\code{push} doesn't involve functions here)
+    \item \textbf{D:} HOF (returns a function)
+    \item \textbf{E:} \func{setTimeout} is a HOF (takes a function as argument)
+\end{itemize}
+\end{exercise}
+
+\begin{exercise}{1.2: Convert to HOF}
+Convert this repetitive code using a higher-order function:
+
+\begin{exercisecode}
+// Current code: three similar functions
+function logError(message) {
+    console.log(`[ERROR] ${message}`);
+}
+
+function logWarning(message) {
+    console.log(`[WARNING] ${message}`);
+}
+
+function logInfo(message) {
+    console.log(`[INFO] ${message}`);
+}
+\end{exercisecode}
+
+\textbf{Solution:}
+\begin{jscode}
+function createLogger(level) {
+    return function(message) {
+        console.log(`[${level}] ${message}`);
+    };
+}
+
+const logError = createLogger('ERROR');
+const logWarning = createLogger('WARNING');
+const logInfo = createLogger('INFO');
+\end{jscode}
+\end{exercise}
+
+\begin{exercise}{1.3: Event Handler Factory}
+Create a HOF called \func{createClickHandler} that:
+\begin{itemize}
+    \item Takes an \code{action} string
+    \item Returns a function suitable for use as a click handler
+    \item The returned function should log: \code{"Button clicked: \{action\}"}
+\end{itemize}
+
+\begin{exercisecode}
+// Your solution:
+const createClickHandler = action => () => {
+    console.log(`Button clicked: ${action}`);
+};
+
+// Usage:
+const saveHandler = createClickHandler('save');
+const deleteHandler = createClickHandler('delete');
+
+button1.addEventListener('click', saveHandler);
+button2.addEventListener('click', deleteHandler);
+\end{exercisecode}
+\end{exercise}
+
+%% ---------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\patterntable{
+    First-class function & A function treated as a value \\
+    Higher-order function & A function that takes/returns functions \\
+    Callback & A function passed to another function \\
+    Factory function & A function that returns a function \\
+    Closure & A function that remembers its outer scope \\
+}
+
+\begin{keyinsight}
+HOFs let us abstract \emph{what varies} (the operation) from \emph{what stays the same} (the pattern/structure).
+\end{keyinsight}
+\end{chaptersummary}
+
+
+%% ============================================================================
+%% CHAPTER 2: THE CORE THREE
+%% ============================================================================
+
+\chapter{The Core Three --- map, filter, reduce}
+
+\chapterquote{Give me a lever long enough and a fulcrum on which to place it, and I shall move the world.}{Archimedes}
+
+These three array methods are the workhorses of functional JavaScript. Master them, and you'll write cleaner, more expressive code.
+
+%% ---------------------------------------------------------------------------
+\section{map: Transform Every Element}
+
+\func{map} creates a new array by applying a function to every element.
+
+\begin{definition}{map}
+\begin{jscode}
+const newArray = originalArray.map(transformFunction);
+\end{jscode}
+\end{definition}
+
+\subsection{Basic Examples}
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5];
+
+// Double each number
+const doubled = numbers.map(n => n * 2);
+// [2, 4, 6, 8, 10]
+
+// Square each number
+const squared = numbers.map(n => n * n);
+// [1, 4, 9, 16, 25]
+
+// Convert to strings
+const strings = numbers.map(n => String(n));
+// ['1', '2', '3', '4', '5']
+\end{jscode}
+
+\subsection{The Transformation Function}
+
+The function you pass to \func{map} receives three arguments:
+
+\begin{jscode}
+array.map((element, index, originalArray) => {
+    // element: the current item
+    // index: its position (0, 1, 2...)
+    // originalArray: the whole array (rarely used)
+    return transformedValue;
+});
+\end{jscode}
+
+Usually, you only need \code{element}:
+
+\begin{jscode}
+const prices = [10, 20, 30];
+const withTax = prices.map(price => price * 1.2);
+// [12, 24, 36]
+\end{jscode}
+
+Sometimes you need the index:
+
+\begin{jscode}
+const letters = ['a', 'b', 'c'];
+const numbered = letters.map((letter, index) => `${index + 1}. ${letter}`);
+// ['1. a', '2. b', '3. c']
+\end{jscode}
+
+\subsection{Web Dev Example: Processing API Data}
+
+\begin{jscodewithtitle}{API Response Transformation}
+// API returns array of user objects
+const apiResponse = [
+    { id: 1, first_name: 'John', last_name: 'Doe', email: 'john@example.com' },
+    { id: 2, first_name: 'Jane', last_name: 'Smith', email: 'jane@example.com' }
+];
+
+// Transform to the shape your UI needs
+const users = apiResponse.map(user => ({
+    id: user.id,
+    fullName: `${user.first_name} ${user.last_name}`,
+    email: user.email.toLowerCase()
+}));
+
+// [
+//   { id: 1, fullName: 'John Doe', email: 'john@example.com' },
+//   { id: 2, fullName: 'Jane Smith', email: 'jane@example.com' }
+// ]
+\end{jscodewithtitle}
+
+\subsection{Web Dev Example: Rendering Lists}
+
+\begin{jscode}
+// React pattern
+const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' }
+];
+
+const userElements = users.map(user => (
+    <li key={user.id}>{user.name}</li>
+));
+
+// Vanilla JS pattern
+const userHTML = users.map(user => `<li>${user.name}</li>`).join('');
+document.querySelector('ul').innerHTML = userHTML;
+\end{jscode}
+
+\begin{warning}
+\textbf{Critical Rule:} \func{map} always returns an array with the same number of elements:
+\begin{itemize}
+    \item Input: 5 elements $\rightarrow$ Output: 5 elements
+    \item Input: 0 elements $\rightarrow$ Output: 0 elements
+\end{itemize}
+If you need fewer elements, that's \func{filter}. If you need more or fewer, that might be \func{flatMap} or \func{reduce}.
+\end{warning}
+
+%% ---------------------------------------------------------------------------
+\section{filter: Select Elements That Pass a Test}
+
+\func{filter} creates a new array containing only elements that pass a test.
+
+\begin{definition}{filter}
+\begin{jscode}
+const newArray = originalArray.filter(testFunction);
+\end{jscode}
+The test function (predicate) must return \code{true} or \code{false}:
+\begin{itemize}
+    \item Return \code{true} $\rightarrow$ element is included
+    \item Return \code{false} $\rightarrow$ element is excluded
+\end{itemize}
+\end{definition}
+
+\subsection{Basic Examples}
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Keep only even numbers
+const evens = numbers.filter(n => n % 2 === 0);
+// [2, 4, 6, 8, 10]
+
+// Keep only numbers greater than 5
+const big = numbers.filter(n => n > 5);
+// [6, 7, 8, 9, 10]
+
+// Keep only numbers between 3 and 7
+const middle = numbers.filter(n => n >= 3 && n <= 7);
+// [3, 4, 5, 6, 7]
+\end{jscode}
+
+\subsection{The Predicate Function}
+
+A \concept{predicate} is a function that returns \code{true} or \code{false}:
+
+\begin{jscode}
+// These are predicates
+const isEven = n => n % 2 === 0;
+const isPositive = n => n > 0;
+const isLongEnough = str => str.length >= 3;
+const hasEmail = user => user.email !== undefined;
+\end{jscode}
+
+Using named predicates makes code self-documenting:
+
+\begin{codebad}
+const numbers = [-2, -1, 0, 1, 2, 3, 4];
+
+// Less clear
+const result = numbers.filter(n => n > 0 && n % 2 === 0);
+\end{codebad}
+
+\begin{codegood}
+// More clear
+const isPositive = n => n > 0;
+const isEven = n => n % 2 === 0;
+const isPositiveAndEven = n => isPositive(n) && isEven(n);
+
+const result = numbers.filter(isPositiveAndEven);
+// [2, 4]
+\end{codegood}
+
+\subsection{Web Dev Example: Filtering Products}
+
+\begin{jscode}
+const products = [
+    { id: 1, name: 'Laptop', price: 999, inStock: true, category: 'electronics' },
+    { id: 2, name: 'Shirt', price: 29, inStock: true, category: 'clothing' },
+    { id: 3, name: 'Phone', price: 699, inStock: false, category: 'electronics' },
+    { id: 4, name: 'Pants', price: 59, inStock: true, category: 'clothing' }
+];
+
+// Only in-stock items
+const available = products.filter(p => p.inStock);
+
+// Only electronics
+const electronics = products.filter(p => p.category === 'electronics');
+
+// Affordable and available
+const affordable = products.filter(p => p.price < 100 && p.inStock);
+// [{ id: 2, ... }, { id: 4, ... }]
+\end{jscode}
+
+\subsection{Web Dev Example: Form Validation}
+
+\begin{jscode}
+const formFields = [
+    { name: 'email', value: 'test@example.com', required: true },
+    { name: 'phone', value: '', required: false },
+    { name: 'name', value: '', required: true }
+];
+
+// Find all invalid required fields
+const invalidFields = formFields.filter(field =>
+    field.required && field.value.trim() === ''
+);
+
+// [{ name: 'name', value: '', required: true }]
+
+if (invalidFields.length > 0) {
+    console.log('Please fill in:', invalidFields.map(f => f.name));
+}
+\end{jscode}
+
+\subsection{Filtering Out Falsy Values}
+
+A common pattern to clean up arrays:
+
+\begin{jscode}
+const messyArray = [0, 'hello', '', null, 'world', undefined, 42, false];
+
+// Remove all falsy values
+const clean = messyArray.filter(Boolean);
+// ['hello', 'world', 42]
+
+// This works because Boolean(value) returns true/false
+// filter keeps elements where Boolean(element) is true
+\end{jscode}
+
+\begin{tip}
+The \code{Boolean} function is a handy predicate for removing falsy values like \code{null}, \code{undefined}, \code{''}, \code{0}, and \code{false}.
+\end{tip}
+
+%% ---------------------------------------------------------------------------
+\section{reduce: Accumulate to a Single Value}
+
+\func{reduce} processes an array and accumulates it into a single value. That value can be a number, string, object, or even another array.
+
+\begin{definition}{reduce}
+\begin{jscode}
+const result = array.reduce(reducerFunction, initialValue);
+\end{jscode}
+The reducer function receives:
+\begin{jscode}
+array.reduce((accumulator, currentElement, index, array) => {
+    // accumulator: the running total/result
+    // currentElement: the current item being processed
+    // Return the new accumulator value
+    return newAccumulator;
+}, initialValue);
+\end{jscode}
+\end{definition}
+
+\subsection{Basic Example: Sum}
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5];
+
+const sum = numbers.reduce((total, num) => total + num, 0);
+// Step by step:
+// total=0, num=1 -> return 1
+// total=1, num=2 -> return 3
+// total=3, num=3 -> return 6
+// total=6, num=4 -> return 10
+// total=10, num=5 -> return 15
+// Result: 15
+\end{jscode}
+
+\begin{asciibox}
+Step-by-step execution of reduce:
+
+Initial:  accumulator = 0
+
+Step 1:   0 + 1 = 1   (accumulator is now 1)
+Step 2:   1 + 2 = 3   (accumulator is now 3)
+Step 3:   3 + 3 = 6   (accumulator is now 6)
+Step 4:   6 + 4 = 10  (accumulator is now 10)
+Step 5:   10 + 5 = 15 (accumulator is now 15)
+
+Final:    15
+\end{asciibox}
+
+\begin{danger}
+\textbf{Always Provide Initial Value!}
+
+\begin{jscode}
+// GOOD: explicit initial value
+const sum = numbers.reduce((acc, n) => acc + n, 0);
+
+// RISKY: no initial value (uses first element)
+const sum = numbers.reduce((acc, n) => acc + n);
+// Works, but fails on empty array!
+
+// This throws an error:
+[].reduce((acc, n) => acc + n); // TypeError!
+
+// This returns 0 safely:
+[].reduce((acc, n) => acc + n, 0); // 0
+\end{jscode}
+\end{danger}
+
+\subsection{Common Reductions}
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5];
+
+// Sum
+const sum = numbers.reduce((acc, n) => acc + n, 0);
+// 15
+
+// Product
+const product = numbers.reduce((acc, n) => acc * n, 1);
+// 120
+
+// Maximum
+const max = numbers.reduce((acc, n) => n > acc ? n : acc, -Infinity);
+// 5
+
+// Minimum
+const min = numbers.reduce((acc, n) => n < acc ? n : acc, Infinity);
+// 1
+\end{jscode}
+
+\subsection{reduce to Object}
+
+\begin{jscodewithtitle}{Creating a Lookup Object}
+const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' },
+    { id: 3, name: 'Charlie' }
+];
+
+// Create a lookup object by ID
+const usersById = users.reduce((acc, user) => {
+    acc[user.id] = user;
+    return acc;
+}, {});
+
+// {
+//   1: { id: 1, name: 'Alice' },
+//   2: { id: 2, name: 'Bob' },
+//   3: { id: 3, name: 'Charlie' }
+// }
+
+// Now O(1) lookup instead of O(n) find:
+const user = usersById[2]; // { id: 2, name: 'Bob' }
+\end{jscodewithtitle}
+
+\subsection{reduce to Count Occurrences}
+
+\begin{jscode}
+const fruits = ['apple', 'banana', 'apple', 'orange', 'banana', 'apple'];
+
+const counts = fruits.reduce((acc, fruit) => {
+    acc[fruit] = (acc[fruit] || 0) + 1;
+    return acc;
+}, {});
+
+// { apple: 3, banana: 2, orange: 1 }
+\end{jscode}
+
+\subsection{reduce to Group By}
+
+\begin{jscode}
+const people = [
+    { name: 'Alice', department: 'Engineering' },
+    { name: 'Bob', department: 'Sales' },
+    { name: 'Charlie', department: 'Engineering' },
+    { name: 'Diana', department: 'Sales' }
+];
+
+const byDepartment = people.reduce((acc, person) => {
+    const dept = person.department;
+    if (!acc[dept]) {
+        acc[dept] = [];
+    }
+    acc[dept].push(person);
+    return acc;
+}, {});
+
+// {
+//   Engineering: [{ name: 'Alice', ... }, { name: 'Charlie', ... }],
+//   Sales: [{ name: 'Bob', ... }, { name: 'Diana', ... }]
+// }
+\end{jscode}
+
+\subsection{Web Dev Example: Shopping Cart Total}
+
+\begin{jscode}
+const cart = [
+    { name: 'Laptop', price: 999, quantity: 1 },
+    { name: 'Mouse', price: 29, quantity: 2 },
+    { name: 'Keyboard', price: 79, quantity: 1 }
+];
+
+const total = cart.reduce((sum, item) => {
+    return sum + (item.price * item.quantity);
+}, 0);
+
+// 999 + 58 + 79 = 1136
+\end{jscode}
+
+\subsection{Web Dev Example: Flatten Query Parameters}
+
+\begin{jscode}
+const params = [
+    { key: 'page', value: '1' },
+    { key: 'sort', value: 'name' },
+    { key: 'order', value: 'asc' }
+];
+
+const queryString = params.reduce((acc, param, index) => {
+    const prefix = index === 0 ? '?' : '&';
+    return `${acc}${prefix}${param.key}=${param.value}`;
+}, '');
+
+// '?page=1&sort=name&order=asc'
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{Method Chaining: Combining map, filter, reduce}
+
+The real power comes from combining these methods:
+
+\begin{jscode}
+const users = [
+    { name: 'Alice', age: 25, active: true },
+    { name: 'Bob', age: 17, active: true },
+    { name: 'Charlie', age: 30, active: false },
+    { name: 'Diana', age: 22, active: true }
+];
+
+// Get names of active adults
+const activeAdultNames = users
+    .filter(user => user.active)           // Keep active users
+    .filter(user => user.age >= 18)        // Keep adults
+    .map(user => user.name);               // Extract names
+
+// ['Alice', 'Diana']
+\end{jscode}
+
+\subsection{Reading Chains: Top to Bottom}
+
+\begin{jscode}
+const result = data
+    .filter(...)   // First: remove unwanted items
+    .map(...)      // Second: transform remaining items
+    .reduce(...);  // Third: combine into final result
+
+// Read it as a story:
+// "Take data, keep only X, transform each to Y, combine into Z"
+\end{jscode}
+
+\begin{keyinsight}
+Think of data processing as a \concept{pipeline}---data flows through transformations, filters, and accumulations.
+\end{keyinsight}
+
+\subsection{Web Dev Example: API Response Processing}
+
+\begin{jscode}
+// Raw API response
+const apiResponse = {
+    data: [
+        { id: 1, type: 'user', attributes: { name: 'Alice', email: 'alice@test.com', role: 'admin' }},
+        { id: 2, type: 'user', attributes: { name: 'Bob', email: 'bob@test.com', role: 'user' }},
+        { id: 3, type: 'user', attributes: { name: 'Charlie', email: null, role: 'user' }},
+        { id: 4, type: 'user', attributes: { name: 'Diana', email: 'diana@test.com', role: 'admin' }}
+    ]
+};
+
+// Process: get admin emails for notification
+const adminEmails = apiResponse.data
+    .filter(item => item.attributes.role === 'admin')  // Only admins
+    .filter(item => item.attributes.email !== null)    // Has email
+    .map(item => item.attributes.email);               // Extract email
+
+// ['alice@test.com', 'diana@test.com']
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{Performance Consideration}
+
+\begin{note}
+Each \func{map} and \func{filter} creates a new array:
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+const result = numbers
+    .filter(n => n % 2 === 0)  // Creates [2, 4, 6, 8, 10]
+    .map(n => n * 2)           // Creates [4, 8, 12, 16, 20]
+    .filter(n => n > 10);      // Creates [12, 16, 20]
+\end{jscode}
+
+\textbf{For small arrays (< 10,000 items):} Don't worry. The clarity is worth it.
+
+\textbf{For large arrays:} We'll cover optimization in Chapter 12 (transducers, lazy evaluation).
+\end{note}
+
+%% ---------------------------------------------------------------------------
+\section{When to Use Each}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\textwidth} >{\raggedright\arraybackslash}p{0.15\textwidth} >{\raggedright\arraybackslash}p{0.45\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Goal} & \textbf{\sffamily Method} & \textbf{\sffamily Example} \\
+    \midrule
+    Transform each element & \func{map} & Convert prices to include tax \\
+    Remove some elements & \func{filter} & Keep only in-stock items \\
+    Combine into one value & \func{reduce} & Calculate total price \\
+    Find one element & \func{find} & Get user by ID (Chapter 3) \\
+    Check if any pass & \func{some} & Are any items on sale? (Chapter 3) \\
+    Check if all pass & \func{every} & Are all fields valid? (Chapter 3) \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+%% ---------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{2.1: Data Transformation}
+Given this API response, extract an array of formatted strings:
+
+\begin{exercisecode}
+const products = [
+    { id: 1, name: 'Laptop', price: 999.99, currency: 'USD' },
+    { id: 2, name: 'Mouse', price: 29.99, currency: 'USD' },
+    { id: 3, name: 'Keyboard', price: 79.99, currency: 'USD' }
+];
+
+// Solution:
+const formatted = products.map(p => `${p.name}: $${p.price}`);
+// ['Laptop: $999.99', 'Mouse: $29.99', 'Keyboard: $79.99']
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{2.2: Filter Chain}
+Given this data, find all active premium users from the US:
+
+\begin{exercisecode}
+const users = [
+    { id: 1, name: 'Alice', country: 'US', plan: 'premium', active: true },
+    { id: 2, name: 'Bob', country: 'UK', plan: 'premium', active: true },
+    { id: 3, name: 'Charlie', country: 'US', plan: 'free', active: true },
+    { id: 4, name: 'Diana', country: 'US', plan: 'premium', active: false },
+    { id: 5, name: 'Eve', country: 'US', plan: 'premium', active: true }
+];
+
+// Solution:
+const result = users
+    .filter(u => u.active)
+    .filter(u => u.plan === 'premium')
+    .filter(u => u.country === 'US');
+// [{ id: 1, ... }, { id: 5, ... }]
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{2.3: Reduce to Object}
+Convert this array to an object grouped by category:
+
+\begin{exercisecode}
+const items = [
+    { name: 'Apple', category: 'fruit' },
+    { name: 'Carrot', category: 'vegetable' },
+    { name: 'Banana', category: 'fruit' },
+    { name: 'Broccoli', category: 'vegetable' }
+];
+
+// Solution:
+const grouped = items.reduce((acc, item) => {
+    if (!acc[item.category]) {
+        acc[item.category] = [];
+    }
+    acc[item.category].push(item.name);
+    return acc;
+}, {});
+// { fruit: ['Apple', 'Banana'], vegetable: ['Carrot', 'Broccoli'] }
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{2.4: Complete Pipeline}
+Build a data processing pipeline for this e-commerce scenario:
+
+\begin{exercisecode}
+const orders = [
+    { id: 1, customer: 'Alice', items: [{ price: 10 }, { price: 20 }], status: 'completed' },
+    { id: 2, customer: 'Bob', items: [{ price: 15 }], status: 'pending' },
+    { id: 3, customer: 'Alice', items: [{ price: 30 }, { price: 40 }], status: 'completed' },
+    { id: 4, customer: 'Charlie', items: [{ price: 25 }], status: 'completed' }
+];
+
+// Task: Calculate total revenue from completed orders
+// Solution:
+const revenue = orders
+    .filter(order => order.status === 'completed')
+    .flatMap(order => order.items)
+    .reduce((sum, item) => sum + item.price, 0);
+// 10 + 20 + 30 + 40 + 25 = 125
+\end{exercisecode}
+\end{exercise}
+
+%% ---------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.12\textwidth} >{\raggedright\arraybackslash}p{0.22\textwidth} >{\raggedright\arraybackslash}p{0.22\textwidth} >{\raggedright\arraybackslash}p{0.30\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Method} & \textbf{\sffamily Input} & \textbf{\sffamily Output} & \textbf{\sffamily Purpose} \\
+    \midrule
+    \func{map} & Array of N items & Array of N items & Transform each element \\
+    \func{filter} & Array of N items & Array of 0 to N items & Keep elements that pass test \\
+    \func{reduce} & Array of N items & Single value (any type) & Accumulate to one result \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyinsight}
+Think of data processing as a pipeline---data flows through transformations, filters, and accumulations.
+\end{keyinsight}
+\end{chaptersummary}
+
+
+%% ============================================================================
+%% CHAPTER 3: BEYOND THE CORE
+%% ============================================================================
+
+\chapter{Beyond the Core --- find, some, every, flatMap}
+
+\chapterquote{Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away.}{Antoine de Saint-Exup\'{e}ry}
+
+The core three (\func{map}, \func{filter}, \func{reduce}) handle most cases, but these additional methods make specific patterns cleaner and more efficient.
+
+%% ---------------------------------------------------------------------------
+\section{find: Get the First Match}
+
+\func{find} returns the \textbf{first element} that passes a test, or \code{undefined} if none match.
+
+\begin{definition}{find}
+\begin{jscode}
+const element = array.find(testFunction);
+// Returns: the element itself, or undefined
+\end{jscode}
+\end{definition}
+
+\subsection{Basic Example}
+
+\begin{jscode}
+const numbers = [1, 5, 10, 15, 20];
+
+const firstBigNumber = numbers.find(n => n > 8);
+// 10 (not [10, 15, 20] -- just the first one)
+
+const notFound = numbers.find(n => n > 100);
+// undefined
+\end{jscode}
+
+\subsection{find vs filter}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.15\textwidth} >{\raggedright\arraybackslash}p{0.35\textwidth} >{\raggedright\arraybackslash}p{0.40\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Method} & \textbf{\sffamily Returns} & \textbf{\sffamily Use When} \\
+    \midrule
+    \func{filter} & Array of all matches & You need all matching items \\
+    \func{find} & First match or \code{undefined} & You need just one item \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{jscode}
+const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' },
+    { id: 3, name: 'Alice' }  // Duplicate name
+];
+
+// filter: all users named Alice
+users.filter(u => u.name === 'Alice');
+// [{ id: 1, name: 'Alice' }, { id: 3, name: 'Alice' }]
+
+// find: first user named Alice
+users.find(u => u.name === 'Alice');
+// { id: 1, name: 'Alice' }
+\end{jscode}
+
+\subsection{Performance: find Stops Early}
+
+\func{find} stops iterating as soon as it finds a match:
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// find stops at 3
+numbers.find(n => {
+    console.log('Checking', n);
+    return n > 2;
+});
+// Logs: Checking 1, Checking 2, Checking 3
+// Returns: 3
+
+// filter checks everything
+numbers.filter(n => {
+    console.log('Checking', n);
+    return n > 2;
+});
+// Logs: Checking 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+// Returns: [3, 4, 5, 6, 7, 8, 9, 10]
+\end{jscode}
+
+\begin{tip}
+Use \func{find} when you only need one item---it's more efficient than \func{filter} because it stops at the first match.
+\end{tip}
+
+\subsection{Web Dev Example: Find User by ID}
+
+\begin{jscode}
+const users = [
+    { id: 1, name: 'Alice', email: 'alice@test.com' },
+    { id: 2, name: 'Bob', email: 'bob@test.com' },
+    { id: 3, name: 'Charlie', email: 'charlie@test.com' }
+];
+
+function getUserById(id) {
+    return users.find(user => user.id === id);
+}
+
+const user = getUserById(2);
+// { id: 2, name: 'Bob', email: 'bob@test.com' }
+
+const notFound = getUserById(999);
+// undefined
+\end{jscode}
+
+\subsection{Handling undefined}
+
+\begin{jscode}
+const user = users.find(u => u.id === 999);
+
+// WRONG: might crash
+console.log(user.name); // TypeError: Cannot read property 'name' of undefined
+
+// RIGHT: check first
+if (user) {
+    console.log(user.name);
+}
+
+// Or use optional chaining
+console.log(user?.name); // undefined (no crash)
+
+// Or provide default
+const name = user?.name ?? 'Unknown';
+\end{jscode}
+
+\subsection{findIndex: Get Position Instead of Element}
+
+\begin{jscode}
+const numbers = [10, 20, 30, 40];
+
+const index = numbers.findIndex(n => n > 25);
+// 2 (position of 30)
+
+const notFoundIndex = numbers.findIndex(n => n > 100);
+// -1 (not found)
+\end{jscode}
+
+Useful when you need to modify or remove:
+
+\begin{jscode}
+const todos = [
+    { id: 1, text: 'Learn JS', done: false },
+    { id: 2, text: 'Build app', done: false }
+];
+
+// Find and update
+const index = todos.findIndex(t => t.id === 1);
+if (index !== -1) {
+    todos[index] = { ...todos[index], done: true };
+}
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{some: Does Any Element Pass?}
+
+\func{some} returns \code{true} if \textbf{at least one} element passes the test.
+
+\begin{definition}{some}
+\begin{jscode}
+const hasMatch = array.some(testFunction);
+// Returns: true or false
+\end{jscode}
+\end{definition}
+
+\subsection{Basic Examples}
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5];
+
+numbers.some(n => n > 4);    // true (5 is > 4)
+numbers.some(n => n > 10);   // false (none are > 10)
+numbers.some(n => n === 3);  // true (3 exists)
+\end{jscode}
+
+\subsection{some Stops Early}
+
+Like \func{find}, \func{some} stops as soon as it finds a passing element:
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5];
+
+numbers.some(n => {
+    console.log('Checking', n);
+    return n === 2;
+});
+// Logs: Checking 1, Checking 2
+// Returns: true (stopped early)
+\end{jscode}
+
+\subsection{Web Dev Example: Permission Check}
+
+\begin{jscode}
+const user = {
+    name: 'Alice',
+    roles: ['editor', 'viewer']
+};
+
+const adminRoles = ['admin', 'superadmin'];
+
+const isAdmin = user.roles.some(role => adminRoles.includes(role));
+// false
+
+// Or check for specific permission
+const canEdit = user.roles.some(role => role === 'editor' || role === 'admin');
+// true
+\end{jscode}
+
+\subsection{Web Dev Example: Form Has Errors}
+
+\begin{jscode}
+const formFields = [
+    { name: 'email', error: null },
+    { name: 'password', error: 'Too short' },
+    { name: 'username', error: null }
+];
+
+const hasErrors = formFields.some(field => field.error !== null);
+// true
+
+if (hasErrors) {
+    console.log('Please fix errors before submitting');
+}
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{every: Do All Elements Pass?}
+
+\func{every} returns \code{true} only if \textbf{all elements} pass the test.
+
+\begin{definition}{every}
+\begin{jscode}
+const allPass = array.every(testFunction);
+// Returns: true or false
+\end{jscode}
+\end{definition}
+
+\subsection{Basic Examples}
+
+\begin{jscode}
+const numbers = [2, 4, 6, 8];
+
+numbers.every(n => n % 2 === 0);  // true (all even)
+numbers.every(n => n > 5);        // false (2 and 4 fail)
+numbers.every(n => n > 0);        // true (all positive)
+\end{jscode}
+
+\subsection{every Stops Early (On First Failure)}
+
+\begin{jscode}
+const numbers = [2, 4, 5, 6, 8];  // 5 is odd
+
+numbers.every(n => {
+    console.log('Checking', n);
+    return n % 2 === 0;
+});
+// Logs: Checking 2, Checking 4, Checking 5
+// Returns: false (stopped at 5)
+\end{jscode}
+
+\begin{warning}
+\textbf{Empty Array:} \func{every} returns \code{true}
+
+\begin{jscode}
+[].every(n => n > 0);  // true (vacuous truth)
+\end{jscode}
+
+This might surprise you. Logically: ``all elements pass'' is true when there are no elements to fail.
+\end{warning}
+
+\subsection{Web Dev Example: Form Validation}
+
+\begin{jscode}
+const formFields = [
+    { name: 'email', value: 'test@example.com', valid: true },
+    { name: 'password', value: '12345678', valid: true },
+    { name: 'username', value: 'alice', valid: true }
+];
+
+const isFormValid = formFields.every(field => field.valid);
+// true
+
+// With validation functions
+const validators = {
+    email: value => value.includes('@'),
+    password: value => value.length >= 8,
+    username: value => value.length >= 3
+};
+
+const isValid = formFields.every(field =>
+    validators[field.name](field.value)
+);
+\end{jscode}
+
+\subsection{Web Dev Example: All Items Selected}
+
+\begin{jscode}
+const items = [
+    { id: 1, selected: true },
+    { id: 2, selected: true },
+    { id: 3, selected: false }
+];
+
+const allSelected = items.every(item => item.selected);
+// false
+
+// Toggle "select all" checkbox state
+selectAllCheckbox.checked = allSelected;
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{some vs every: Quick Reference}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.12\textwidth} >{\raggedright\arraybackslash}p{0.28\textwidth} >{\raggedright\arraybackslash}p{0.22\textwidth} >{\raggedright\arraybackslash}p{0.24\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Method} & \textbf{\sffamily Returns true when} & \textbf{\sffamily Stops when} & \textbf{\sffamily Empty array} \\
+    \midrule
+    \func{some} & At least one passes & First pass & \code{false} \\
+    \func{every} & All pass & First fail & \code{true} \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5];
+
+// "Is there ANY number greater than 3?"
+numbers.some(n => n > 3);   // true
+
+// "Are ALL numbers greater than 3?"
+numbers.every(n => n > 3);  // false
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{flatMap: Map and Flatten in One Step}
+
+\func{flatMap} combines \func{map} and \func{flat(1)}---it transforms each element and flattens one level.
+
+\subsection{The Problem flatMap Solves}
+
+\begin{jscode}
+const sentences = ['Hello world', 'How are you'];
+
+// map gives nested arrays
+const words = sentences.map(s => s.split(' '));
+// [['Hello', 'world'], ['How', 'are', 'you']]
+
+// We need to flatten
+const flatWords = sentences.map(s => s.split(' ')).flat();
+// ['Hello', 'world', 'How', 'are', 'you']
+
+// flatMap does both in one step
+const words2 = sentences.flatMap(s => s.split(' '));
+// ['Hello', 'world', 'How', 'are', 'you']
+\end{jscode}
+
+\begin{definition}{flatMap}
+\begin{jscode}
+// These are equivalent:
+array.flatMap(fn)
+array.map(fn).flat(1)
+\end{jscode}
+Use \func{flatMap} when your transformation function returns an array and you want all results in a single flat array.
+\end{definition}
+
+\subsection{When Your Transform Returns an Array}
+
+\begin{jscode}
+const users = [
+    { name: 'Alice', pets: ['cat', 'dog'] },
+    { name: 'Bob', pets: ['fish'] },
+    { name: 'Charlie', pets: [] }
+];
+
+// Get all pets
+const allPets = users.flatMap(user => user.pets);
+// ['cat', 'dog', 'fish']
+
+// With map, you'd get nested arrays:
+const nested = users.map(user => user.pets);
+// [['cat', 'dog'], ['fish'], []]
+\end{jscode}
+
+\subsection{flatMap for Conditional Inclusion}
+
+Return empty array \code{[]} to exclude items, array with item \code{[item]} to include:
+
+\begin{jscode}
+const numbers = [1, 2, 3, 4, 5, 6];
+
+// Double only even numbers, remove odds
+const doubledEvens = numbers.flatMap(n =>
+    n % 2 === 0 ? [n * 2] : []
+);
+// [4, 8, 12]
+
+// Equivalent to filter + map:
+const same = numbers.filter(n => n % 2 === 0).map(n => n * 2);
+\end{jscode}
+
+\subsection{Web Dev Example: Nested Data Extraction}
+
+\begin{jscode}
+const departments = [
+    {
+        name: 'Engineering',
+        teams: [
+            { name: 'Frontend', members: ['Alice', 'Bob'] },
+            { name: 'Backend', members: ['Charlie'] }
+        ]
+    },
+    {
+        name: 'Design',
+        teams: [
+            { name: 'UX', members: ['Diana', 'Eve'] }
+        ]
+    }
+];
+
+// Get all team names
+const teamNames = departments.flatMap(dept =>
+    dept.teams.map(team => team.name)
+);
+// ['Frontend', 'Backend', 'UX']
+
+// Get all members
+const allMembers = departments.flatMap(dept =>
+    dept.teams.flatMap(team => team.members)
+);
+// ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve']
+\end{jscode}
+
+\subsection{Web Dev Example: Processing Nested API Response}
+
+\begin{jscode}
+const apiResponse = {
+    pages: [
+        { items: [{ id: 1 }, { id: 2 }] },
+        { items: [{ id: 3 }] },
+        { items: [{ id: 4 }, { id: 5 }] }
+    ]
+};
+
+// Flatten all items from all pages
+const allItems = apiResponse.pages.flatMap(page => page.items);
+// [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }]
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{Combining Everything: Real Patterns}
+
+\subsection{Pattern: Find and Transform}
+
+\begin{jscode}
+const products = [
+    { id: 1, name: 'Laptop', price: 999 },
+    { id: 2, name: 'Phone', price: 699 },
+    { id: 3, name: 'Tablet', price: 499 }
+];
+
+// Find product and get just the name
+const productName = products.find(p => p.id === 2)?.name;
+// 'Phone'
+
+// Find product and transform it
+const productCard = products.find(p => p.id === 2);
+const formatted = productCard
+    ? `${productCard.name}: $${productCard.price}`
+    : 'Not found';
+// 'Phone: $699'
+\end{jscode}
+
+\subsection{Pattern: Validate Then Process}
+
+\begin{jscode}
+const items = [
+    { name: 'A', quantity: 5, price: 10 },
+    { name: 'B', quantity: 0, price: 20 },
+    { name: 'C', quantity: 3, price: 15 }
+];
+
+// Check if all items have valid quantities before calculating
+const allValid = items.every(item => item.quantity >= 0);
+
+if (allValid) {
+    const total = items
+        .filter(item => item.quantity > 0)  // Only items with quantity
+        .map(item => item.quantity * item.price)  // Calculate line totals
+        .reduce((sum, lineTotal) => sum + lineTotal, 0);  // Sum up
+
+    console.log(`Total: $${total}`);  // Total: $95
+}
+\end{jscode}
+
+\subsection{Pattern: Extract from Nested Structure}
+
+\begin{jscode}
+const organization = {
+    departments: [
+        {
+            name: 'Engineering',
+            employees: [
+                { name: 'Alice', skills: ['JS', 'React'] },
+                { name: 'Bob', skills: ['Python', 'JS'] }
+            ]
+        },
+        {
+            name: 'Design',
+            employees: [
+                { name: 'Charlie', skills: ['Figma', 'CSS'] }
+            ]
+        }
+    ]
+};
+
+// Find all unique skills in the organization
+const allSkills = organization.departments
+    .flatMap(dept => dept.employees)
+    .flatMap(emp => emp.skills);
+
+const uniqueSkills = [...new Set(allSkills)];
+// ['JS', 'React', 'Python', 'Figma', 'CSS']
+
+// Find if anyone knows React
+const hasReactDev = organization.departments
+    .flatMap(dept => dept.employees)
+    .some(emp => emp.skills.includes('React'));
+// true
+\end{jscode}
+
+%% ---------------------------------------------------------------------------
+\section{Decision Guide: Which Method to Use?}
+
+\begin{asciibox}
+Do you need...
+
++-- All items that match?
+|   \-- filter()
+|
++-- Just the first match?
+|   \-- find()
+|
++-- The position of first match?
+|   \-- findIndex()
+|
++-- To know if ANY item matches?
+|   \-- some()
+|
++-- To know if ALL items match?
+|   \-- every()
+|
++-- To transform each item?
+|   +-- One-to-one transformation?
+|   |   \-- map()
+|   \-- One-to-many (nested results)?
+|       \-- flatMap()
+|
+\-- To combine into single value?
+    \-- reduce()
+\end{asciibox}
+
+%% ---------------------------------------------------------------------------
+\section{Practice Exercises}
+
+\begin{exercise}{3.1: User Lookup}
+Implement these functions using the appropriate methods:
+
+\begin{exercisecode}
+const users = [
+    { id: 1, name: 'Alice', role: 'admin', active: true },
+    { id: 2, name: 'Bob', role: 'user', active: false },
+    { id: 3, name: 'Charlie', role: 'user', active: true },
+    { id: 4, name: 'Diana', role: 'admin', active: true }
+];
+
+// 1. Find user by ID
+const findById = id => users.find(u => u.id === id);
+
+// 2. Check if any user is inactive
+const hasInactiveUsers = () => users.some(u => !u.active);
+
+// 3. Check if all admins are active
+const allAdminsActive = () => users
+    .filter(u => u.role === 'admin')
+    .every(u => u.active);
+
+// 4. Get index of first inactive user
+const findFirstInactiveIndex = () => users.findIndex(u => !u.active);
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{3.2: Nested Data Extraction}
+Given this data structure, extract all product names across all categories:
+
+\begin{exercisecode}
+const store = {
+    categories: [
+        {
+            name: 'Electronics',
+            products: [
+                { name: 'Laptop', price: 999 },
+                { name: 'Phone', price: 699 }
+            ]
+        },
+        {
+            name: 'Clothing',
+            products: [
+                { name: 'Shirt', price: 29 },
+                { name: 'Pants', price: 49 },
+                { name: 'Hat', price: 19 }
+            ]
+        }
+    ]
+};
+
+// Solution:
+const productNames = store.categories
+    .flatMap(cat => cat.products)
+    .map(p => p.name);
+// ['Laptop', 'Phone', 'Shirt', 'Pants', 'Hat']
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{3.3: Shopping Cart Operations}
+Implement these cart operations:
+
+\begin{exercisecode}
+const cart = [
+    { id: 1, name: 'Laptop', price: 999, quantity: 1 },
+    { id: 2, name: 'Mouse', price: 29, quantity: 2 },
+    { id: 3, name: 'Keyboard', price: 79, quantity: 1 },
+    { id: 4, name: 'Monitor', price: 299, quantity: 0 }  // Out of stock
+];
+
+// 1. Find item by ID
+const findItem = id => cart.find(item => item.id === id);
+
+// 2. Check if cart has any out-of-stock items
+const hasOutOfStock = () => cart.some(item => item.quantity === 0);
+
+// 3. Check if all items are available
+const allAvailable = () => cart.every(item => item.quantity > 0);
+
+// 4. Get available items summary
+const getAvailableItemsSummary = () => cart
+    .filter(item => item.quantity > 0)
+    .map(item => `${item.name} (x${item.quantity})`);
+// ['Laptop (x1)', 'Mouse (x2)', 'Keyboard (x1)']
+\end{exercisecode}
+\end{exercise}
+
+%% ---------------------------------------------------------------------------
+\section{Chapter Summary}
+
+\begin{chaptersummary}
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.15\textwidth} >{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.18\textwidth} >{\raggedright\arraybackslash}p{0.28\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Method} & \textbf{\sffamily Returns} & \textbf{\sffamily Stops Early?} & \textbf{\sffamily Use Case} \\
+    \midrule
+    \func{find} & First match or \code{undefined} & Yes (first match) & Get single item by condition \\
+    \func{findIndex} & Index or \code{-1} & Yes (first match) & Get position for updates \\
+    \func{some} & \code{true}/\code{false} & Yes (first \code{true}) & Check if any item matches \\
+    \func{every} & \code{true}/\code{false} & Yes (first \code{false}) & Validate all items \\
+    \func{flatMap} & Flattened array & No & Transform + flatten nested results \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyinsight}
+\func{find}, \func{some}, and \func{every} are optimized for early exit---use them instead of \func{filter} when you only need to know about existence or validity.
+\end{keyinsight}
+\end{chaptersummary}
+
+
+%% ============================================================================
+%% PART I SUMMARY
+%% ============================================================================
+
+\chapter*{Part I Summary: Building Blocks Mastered}
+\addcontentsline{toc}{chapter}{Part I Summary}
+
+You now have the foundation:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{tablestripe}{white}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.32\textwidth} >{\raggedright\arraybackslash}p{0.58\textwidth}}
+    \toprule
+    \rowcolor{tableheader}
+    \textbf{\sffamily Concept} & \textbf{\sffamily What You Learned} \\
+    \midrule
+    First-Class Functions & Functions are values---store, pass, return them \\
+    Higher-Order Functions & Functions that take/return functions \\
+    Closures & Inner functions remember outer scope \\
+    \func{map} & Transform every element (1:1) \\
+    \func{filter} & Keep elements that pass test \\
+    \func{reduce} & Accumulate to single value \\
+    \func{find} / \func{findIndex} & Get first match (with early exit) \\
+    \func{some} / \func{every} & Boolean checks (with early exit) \\
+    \func{flatMap} & Transform and flatten nested results \\
+    Method Chaining & Combine operations in readable pipelines \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\section*{What's Next}
+
+In \textbf{Part II: Patterns \& Techniques}, you'll learn:
+\begin{itemize}
+    \item Creating powerful function factories (Chapter 4)
+    \item Building data pipelines with \func{pipe} and \func{compose} (Chapter 5)
+    \item Partial application and currying (Chapter 6)
+    \item The systematic protocol for converting imperative code (Chapter 7)
+\end{itemize}
+
+%% ---------------------------------------------------------------------------
+\section*{Part I Practice Project: User Dashboard Data Pipeline}
+
+\begin{practiceproject}{User Dashboard Data Pipeline}
+Apply everything from Part I to build a complete data processing solution:
+
+\begin{jscode}
+// Raw data from API
+const rawData = {
+    users: [
+        { id: 1, name: 'Alice Johnson', email: 'ALICE@COMPANY.COM',
+          department: 'Engineering', salary: 95000, active: true,
+          startDate: '2020-03-15' },
+        { id: 2, name: 'Bob Smith', email: 'bob@company.com',
+          department: 'Sales', salary: 75000, active: true,
+          startDate: '2019-07-22' },
+        { id: 3, name: 'Charlie Brown', email: 'CHARLIE@COMPANY.COM',
+          department: 'Engineering', salary: 105000, active: false,
+          startDate: '2018-01-10' },
+        { id: 4, name: 'Diana Ross', email: 'diana@company.com',
+          department: 'Engineering', salary: 115000, active: true,
+          startDate: '2017-11-30' },
+        { id: 5, name: 'Eve Wilson', email: 'eve@company.com',
+          department: 'Sales', salary: 80000, active: true,
+          startDate: '2021-02-14' }
+    ],
+    departments: [
+        { name: 'Engineering', budget: 500000 },
+        { name: 'Sales', budget: 300000 }
+    ]
+};
+\end{jscode}
+
+\textbf{Tasks:}
+
+\begin{enumerate}
+    \item \textbf{Get all active users with normalized emails (lowercase)}
+
+    \item \textbf{Calculate total salary expense for active employees}
+
+    \item \textbf{Group active users by department}
+
+    \item \textbf{Find the highest paid active employee}
+
+    \item \textbf{Check if all Engineering employees are active}
+
+    \item \textbf{Get list of departments that have at least one active employee}
+
+    \item \textbf{Calculate average salary per department (active employees only)}
+
+    \item \textbf{Create a summary string for each active user}
+\end{enumerate}
+
+\textbf{Solutions:}
+
+\begin{jscode}
+// 1. Active users with normalized emails
+const activeUsers = rawData.users
+    .filter(u => u.active)
+    .map(u => ({ ...u, email: u.email.toLowerCase() }));
+
+// 2. Total salary expense
+const totalSalary = rawData.users
+    .filter(u => u.active)
+    .reduce((sum, u) => sum + u.salary, 0);
+
+// 3. Group by department
+const byDepartment = rawData.users
+    .filter(u => u.active)
+    .reduce((acc, u) => {
+        if (!acc[u.department]) acc[u.department] = [];
+        acc[u.department].push(u);
+        return acc;
+    }, {});
+
+// 4. Highest paid active employee
+const highestPaid = rawData.users
+    .filter(u => u.active)
+    .reduce((max, u) => u.salary > max.salary ? u : max);
+
+// 5. All Engineering employees active?
+const allEngActive = rawData.users
+    .filter(u => u.department === 'Engineering')
+    .every(u => u.active);
+
+// 6. Departments with active employees
+const activeDepts = [...new Set(
+    rawData.users
+        .filter(u => u.active)
+        .map(u => u.department)
+)];
+
+// 7. Average salary per department
+const avgByDept = rawData.users
+    .filter(u => u.active)
+    .reduce((acc, u) => {
+        if (!acc[u.department]) {
+            acc[u.department] = { total: 0, count: 0 };
+        }
+        acc[u.department].total += u.salary;
+        acc[u.department].count += 1;
+        return acc;
+    }, {});
+// Then: Object.entries(avgByDept).map(([k, v]) => [k, v.total / v.count])
+
+// 8. Summary strings
+const summaries = rawData.users
+    .filter(u => u.active)
+    .map(u => `${u.name} (${u.department}) - $${u.salary}`);
+\end{jscode}
+\end{practiceproject}

@@ -1,0 +1,649 @@
+%% hofvisual.sty
+%% Visual elements package for HOF book
+%% Provides boxes, callouts, diagrams, and visual aids
+%%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{hofvisual}[2024/01/01 HOF Book Visual Elements]
+
+%% ============================================================================
+%% REQUIRED PACKAGES
+%% ============================================================================
+\RequirePackage{tcolorbox}
+\tcbuselibrary{skins,breakable,theorems}
+\RequirePackage{tikz}
+\usetikzlibrary{
+    arrows.meta,
+    shapes.geometric,
+    shapes.misc,
+    positioning,
+    calc,
+    fit,
+    backgrounds,
+    decorations.pathreplacing,
+    decorations.pathmorphing,
+    matrix
+}
+\RequirePackage{fontawesome5}
+\RequirePackage{xcolor}
+
+%% ============================================================================
+%% CALLOUT BOXES
+%% ============================================================================
+
+%% --- Tip Box ---
+\newtcolorbox{tip}[1][]{%
+    enhanced,
+    breakable,
+    colback=tipbg,
+    colframe=tipborder,
+    coltitle=tipborder,
+    fonttitle=\bfseries\sffamily,
+    title={\faLightbulb\quad Tip},
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    leftrule=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- Note Box ---
+\newtcolorbox{note}[1][]{%
+    enhanced,
+    breakable,
+    colback=notebg,
+    colframe=noteborder,
+    coltitle=noteborder,
+    fonttitle=\bfseries\sffamily,
+    title={\faInfoCircle\quad Note},
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    leftrule=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- Warning Box ---
+\newtcolorbox{warning}[1][]{%
+    enhanced,
+    breakable,
+    colback=warningbg,
+    colframe=warningborder,
+    coltitle=warningborder,
+    fonttitle=\bfseries\sffamily,
+    title={\faExclamationTriangle\quad Warning},
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    leftrule=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- Danger/Error Box ---
+\newtcolorbox{danger}[1][]{%
+    enhanced,
+    breakable,
+    colback=dangerbg,
+    colframe=dangerborder,
+    coltitle=dangerborder,
+    fonttitle=\bfseries\sffamily,
+    title={\faTimesCircle\quad Danger},
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    leftrule=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- Key Insight Box ---
+\newtcolorbox{keyinsight}[1][]{%
+    enhanced,
+    breakable,
+    colback=hofsecondary!5,
+    colframe=hofsecondary,
+    coltitle=white,
+    fonttitle=\bfseries\sffamily,
+    title={\faKey\quad Key Insight},
+    colbacktitle=hofsecondary,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- Definition Box ---
+\newtcolorbox{definition}[2][]{%
+    enhanced,
+    breakable,
+    colback=hofprimary!5,
+    colframe=hofprimary,
+    coltitle=white,
+    fonttitle=\bfseries\sffamily,
+    title={\faBook\quad Definition: #2},
+    colbacktitle=hofprimary,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- Example Box ---
+\newtcolorbox{examplebox}[2][]{%
+    enhanced,
+    breakable,
+    colback=hofaccent!5,
+    colframe=hofaccent,
+    coltitle=white,
+    fonttitle=\bfseries\sffamily,
+    title={\faCode\quad Example: #2},
+    colbacktitle=hofaccent,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% ============================================================================
+%% SUMMARY BOXES
+%% ============================================================================
+
+%% --- Chapter Summary ---
+\newtcolorbox{chaptersummary}[1][]{%
+    enhanced,
+    breakable,
+    colback=gray!5,
+    colframe=hofprimary,
+    coltitle=white,
+    fonttitle=\Large\bfseries\sffamily,
+    title={\faClipboardList\quad Chapter Summary},
+    colbacktitle=hofprimary,
+    arc=6pt,
+    outer arc=6pt,
+    boxrule=1pt,
+    left=12pt,
+    right=12pt,
+    top=12pt,
+    bottom=12pt,
+    before skip=2em,
+    after skip=2em,
+    #1
+}
+
+%% --- Quick Reference ---
+\newtcolorbox{quickref}[1][]{%
+    enhanced,
+    breakable,
+    colback=white,
+    colframe=gray!50,
+    coltitle=hofprimary,
+    fonttitle=\bfseries\sffamily,
+    title={\faBookmark\quad Quick Reference},
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% ============================================================================
+%% EXERCISE BOXES
+%% ============================================================================
+
+%% --- Exercise Environment ---
+\newcounter{exercise}[chapter]
+\renewcommand{\theexercise}{\thechapter.\arabic{exercise}}
+
+\newtcolorbox{exercise}[2][]{%
+    enhanced,
+    breakable,
+    colback=hofsecondary!3,
+    colframe=hofsecondary!70,
+    coltitle=white,
+    fonttitle=\bfseries\sffamily,
+    title={\faEdit\quad Exercise #2},
+    colbacktitle=hofsecondary,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=10pt,
+    right=10pt,
+    top=10pt,
+    bottom=10pt,
+    before skip=1.5em,
+    after skip=1.5em,
+    #1
+}
+
+%% --- Practice Project ---
+\newtcolorbox{practiceproject}[2][]{%
+    enhanced,
+    breakable,
+    colback=hofaccent!3,
+    colframe=hofaccent,
+    coltitle=white,
+    fonttitle=\Large\bfseries\sffamily,
+    title={\faRocket\quad Practice Project: #2},
+    colbacktitle=hofaccent,
+    arc=6pt,
+    outer arc=6pt,
+    boxrule=2pt,
+    left=12pt,
+    right=12pt,
+    top=12pt,
+    bottom=12pt,
+    before skip=2em,
+    after skip=2em,
+    #1
+}
+
+%% ============================================================================
+%% ASCII DIAGRAM BOX
+%% ============================================================================
+
+%% --- ASCII Diagram ---
+\newtcolorbox{asciibox}[1][]{%
+    enhanced,
+    colback=gray!5,
+    colframe=gray!30,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    fontupper=\ttfamily\small,
+    #1
+}
+
+%% ============================================================================
+%% COMPARISON BOX (Side by Side)
+%% ============================================================================
+\newtcolorbox{comparison}[1][]{%
+    enhanced,
+    colback=white,
+    colframe=gray!40,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=0pt,
+    right=0pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% ============================================================================
+%% TIKZ DIAGRAM STYLES
+%% ============================================================================
+
+%% --- Node Styles ---
+\tikzstyle{hofnode} = [
+    rectangle,
+    rounded corners=4pt,
+    minimum width=2.5cm,
+    minimum height=1cm,
+    text centered,
+    draw=hofprimary,
+    fill=hofprimary!10,
+    font=\sffamily
+]
+
+\tikzstyle{hofnodedark} = [
+    rectangle,
+    rounded corners=4pt,
+    minimum width=2.5cm,
+    minimum height=1cm,
+    text centered,
+    draw=hofprimary,
+    fill=hofprimary,
+    text=white,
+    font=\sffamily\bfseries
+]
+
+\tikzstyle{datanode} = [
+    rectangle,
+    rounded corners=2pt,
+    minimum width=1.5cm,
+    minimum height=0.7cm,
+    text centered,
+    draw=hofaccent,
+    fill=hofaccent!10,
+    font=\sffamily\small
+]
+
+\tikzstyle{functionnode} = [
+    rectangle,
+    rounded corners=4pt,
+    minimum width=2cm,
+    minimum height=0.8cm,
+    text centered,
+    draw=hofsecondary,
+    fill=hofsecondary!10,
+    font=\ttfamily\small
+]
+
+\tikzstyle{scopebox} = [
+    rectangle,
+    rounded corners=6pt,
+    draw=gray!50,
+    dashed,
+    fill=gray!5,
+    inner sep=10pt
+]
+
+%% --- Arrow Styles ---
+\tikzstyle{hofarrow} = [
+    ->,
+    >=Stealth,
+    thick,
+    color=hofprimary
+]
+
+\tikzstyle{dataarrow} = [
+    ->,
+    >=Stealth,
+    thick,
+    color=hofaccent
+]
+
+\tikzstyle{pipearrow} = [
+    ->,
+    >=Stealth,
+    very thick,
+    color=hofsecondary
+]
+
+%% ============================================================================
+%% PIPELINE DIAGRAM COMMAND
+%% ============================================================================
+\newcommand{\pipelinediagram}[1]{%
+    \begin{center}
+    \begin{tikzpicture}[node distance=0.5cm]
+        #1
+    \end{tikzpicture}
+    \end{center}
+}
+
+%% --- Simple pipeline node ---
+\newcommand{\pipenode}[3]{%
+    \node[functionnode] (#1) at (#2) {#3};
+}
+
+%% --- Pipeline with arrow between nodes ---
+\newcommand{\pipeto}[2]{%
+    \draw[pipearrow] (#1) -- (#2);
+}
+
+%% ============================================================================
+%% CLOSURE DIAGRAM
+%% ============================================================================
+\newenvironment{closurediagram}{%
+    \begin{center}
+    \begin{tikzpicture}[
+        node distance=0.3cm,
+        every node/.style={font=\sffamily\small}
+    ]
+}{%
+    \end{tikzpicture}
+    \end{center}
+}
+
+%% ============================================================================
+%% FLOWCHART ELEMENTS
+%% ============================================================================
+
+\tikzstyle{startstop} = [
+    rectangle,
+    rounded corners=8pt,
+    minimum width=2cm,
+    minimum height=0.8cm,
+    text centered,
+    draw=hofprimary,
+    fill=hofprimary!20,
+    font=\sffamily\bfseries
+]
+
+\tikzstyle{process} = [
+    rectangle,
+    minimum width=3cm,
+    minimum height=0.8cm,
+    text centered,
+    draw=hofprimary,
+    fill=white,
+    font=\sffamily
+]
+
+\tikzstyle{decision} = [
+    diamond,
+    aspect=2,
+    minimum width=2cm,
+    minimum height=1cm,
+    text centered,
+    draw=hofsecondary,
+    fill=hofsecondary!10,
+    font=\sffamily\small
+]
+
+\tikzstyle{io} = [
+    trapezium,
+    trapezium left angle=70,
+    trapezium right angle=110,
+    minimum width=2cm,
+    minimum height=0.8cm,
+    text centered,
+    draw=hofaccent,
+    fill=hofaccent!10,
+    font=\sffamily
+]
+
+%% ============================================================================
+%% MARGIN NOTES
+%% ============================================================================
+\newcommand{\marginnote}[1]{%
+    \marginpar{%
+        \footnotesize\sffamily\color{gray!70}%
+        \raggedright #1
+    }%
+}
+
+%% ============================================================================
+%% ICON COMMANDS
+%% ============================================================================
+\newcommand{\checkmark}{\textcolor{hofaccent}{\faCheck}}
+\newcommand{\crossmark}{\textcolor{dangerborder}{\faTimes}}
+\newcommand{\infoicon}{\textcolor{noteborder}{\faInfoCircle}}
+\newcommand{\warningicon}{\textcolor{warningborder}{\faExclamationTriangle}}
+\newcommand{\tipicon}{\textcolor{tipborder}{\faLightbulb}}
+\newcommand{\codeicon}{\textcolor{hofsecondary}{\faCode}}
+
+%% ============================================================================
+%% STEP-BY-STEP ENVIRONMENT
+%% ============================================================================
+\newcounter{stepcount}
+\newenvironment{steps}{%
+    \setcounter{stepcount}{0}%
+    \begin{list}{%
+        \stepcounter{stepcount}%
+        \tikz[baseline=(num.base)]{
+            \node[
+                circle,
+                draw=hofprimary,
+                fill=hofprimary,
+                text=white,
+                font=\sffamily\bfseries\small,
+                minimum size=1.2em,
+                inner sep=2pt
+            ] (num) {\thestepcount};
+        }%
+    }{%
+        \setlength{\leftmargin}{2.5em}%
+        \setlength{\itemsep}{0.8em}%
+        \setlength{\parsep}{0.3em}%
+    }%
+}{%
+    \end{list}%
+}
+
+%% ============================================================================
+%% CONCEPT MAP BOX
+%% ============================================================================
+\newtcolorbox{conceptmap}[2][]{%
+    enhanced,
+    colback=white,
+    colframe=hofprimary,
+    coltitle=white,
+    fonttitle=\bfseries\sffamily,
+    title={\faProjectDiagram\quad #2},
+    colbacktitle=hofprimary,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% ============================================================================
+%% PHASE/PROTOCOL BOX
+%% ============================================================================
+\newtcolorbox{phase}[2][]{%
+    enhanced,
+    colback=hofprimary!3,
+    colframe=hofprimary!50,
+    coltitle=hofprimary,
+    fonttitle=\bfseries\sffamily,
+    title={Phase #2},
+    attach boxed title to top left={
+        xshift=10pt,
+        yshift=-\tcboxedtitleheight/2
+    },
+    boxed title style={
+        colback=white,
+        colframe=hofprimary!50,
+        arc=2pt,
+        outer arc=2pt
+    },
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=10pt,
+    right=10pt,
+    top=15pt,
+    bottom=10pt,
+    before skip=1.5em,
+    after skip=1em,
+    #1
+}
+
+%% ============================================================================
+%% TABLE ENVIRONMENTS
+%% ============================================================================
+
+%% --- Comparison Table ---
+\newenvironment{comptable}[1][htbp]{%
+    \begin{table}[#1]
+    \centering
+    \renewcommand{\arraystretch}{1.5}
+    \rowcolors{2}{tablestripe}{white}
+}{%
+    \end{table}
+}
+
+%% --- Pattern Table (for HOF patterns) ---
+\newcommand{\patterntable}[1]{%
+    \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \rowcolors{2}{tablestripe}{white}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.65\textwidth}}
+        \toprule
+        \rowcolor{tableheader}
+        \textbf{\sffamily Pattern} & \textbf{\sffamily Description} \\
+        \midrule
+        #1
+        \bottomrule
+    \end{tabular}
+    \end{center}
+}
+
+%% ============================================================================
+%% PART DIVIDER PAGE
+%% ============================================================================
+\newcommand{\partdivider}[2]{%
+    \cleardoublepage
+    \thispagestyle{empty}
+    \vspace*{\fill}
+    \begin{center}
+        {\color{hofprimary}\rule{0.4\textwidth}{2pt}}
+
+        \vspace{1cm}
+
+        {\Huge\bfseries\sffamily\color{hofprimary} Part #1}
+
+        \vspace{0.5cm}
+
+        {\LARGE\sffamily #2}
+
+        \vspace{1cm}
+
+        {\color{hofprimary}\rule{0.4\textwidth}{2pt}}
+    \end{center}
+    \vspace*{\fill}
+    \cleardoublepage
+}
+
+\endinput

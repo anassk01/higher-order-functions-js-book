@@ -1,0 +1,2015 @@
+%% Part5_Mastery_Reference.tex
+%% Part V: Mastery & Reference
+%% Higher-Order Functions in JavaScript
+%% Compile with: lualatex --shell-escape Part5_Mastery_Reference.tex
+%%
+\documentclass{hofbook}
+
+%% Load custom packages
+\usepackage{hofcode}
+\usepackage{hofvisual}
+
+%% ============================================================================
+%% DOCUMENT METADATA
+%% ============================================================================
+\title{Higher-Order Functions in JavaScript}
+\booksubtitle{Part V: Mastery \& Reference}
+\author{Your Name}
+\date{\today}
+\bookversion{1.0}
+
+%% ============================================================================
+%% BEGIN DOCUMENT
+%% ============================================================================
+\begin{document}
+
+%% --- Title Page ---
+\maketitle
+
+%% --- Table of Contents ---
+\frontmatter
+\tableofcontents
+
+%% ============================================================================
+%% MAIN CONTENT
+%% ============================================================================
+\mainmatter
+
+\partdivider{V}{Mastery \& Reference}
+
+% ============================================================================
+% CHAPTER 16: Debugging & Testing Higher-Order Functions
+% ============================================================================
+\chapter{Debugging \& Testing Higher-Order Functions}
+
+Debugging HOFs requires different strategies than debugging imperative code. This chapter gives you the tools to trace, test, and troubleshoot functional pipelines.
+
+\section{The Challenge of Debugging HOFs}
+
+HOFs are harder to debug because:
+
+\begin{enumerate}
+    \item \textbf{Stack traces are abstract}: You see \code{Array.map} instead of your logic
+    \item \textbf{Intermediate values are hidden}: Chained operations don't expose their outputs
+    \item \textbf{Closures capture state}: Variables might not be what you expect
+    \item \textbf{Point-free style hides data}: No variable names to inspect
+\end{enumerate}
+
+\begin{jscode}
+// What failed here?
+const result = data
+    .filter(isValid)      // Which items were removed?
+    .map(transform)       // What did transform produce?
+    .reduce(combine, []); // Why is result wrong?
+
+// Hard to know without visibility into each step
+\end{jscode}
+
+\section{The tap Pattern: Non-Invasive Debugging}
+
+\code{tap} lets you inspect values without breaking the pipeline:
+
+\begin{jscodewithtitle}{The tap Utility}
+// The tap utility
+const tap = (fn) => (value) => {
+    fn(value);
+    return value;  // Pass through unchanged
+};
+
+// Usage: inspect intermediate values
+const result = data
+    .filter(isValid)
+    .map(tap(x => console.log('After filter:', x)))  // Logs each item
+    .map(transform)
+    .map(tap(x => console.log('After transform:', x)))
+    .reduce(combine, []);
+\end{jscodewithtitle}
+
+\subsection{Tap Variations}
+
+\begin{jscode}
+// Log with label
+const tapLog = (label) => tap(x => console.log(label, x));
+
+// Log array length
+const tapCount = (label) => tap(arr =>
+    console.log(label, 'count:', arr.length)
+);
+
+// Conditional logging
+const tapIf = (predicate, fn) => tap(x => {
+    if (predicate(x)) fn(x);
+});
+
+// Log and return for single values
+const tapValue = (label) => (value) => {
+    console.log(label, value);
+    return value;
+};
+
+// Usage
+const result = data
+    .filter(isValid)
+    .map(tapLog('filtered item:'))
+    .map(transform)
+    .map(tapIf(x => x.error, x => console.warn('Error:', x)))
+    .reduce(combine, []);
+\end{jscode}
+
+\subsection{Pipeline Tap for Arrays}
+
+\begin{jscode}
+// Tap the entire array between operations
+const tapArray = (label) => (array) => {
+    console.log(label, {
+        length: array.length,
+        first: array[0],
+        last: array[array.length - 1],
+        sample: array.slice(0, 3)
+    });
+    return array;
+};
+
+// Insert between chain methods
+const result = tapArray('after filter')(
+    data.filter(isValid)
+);
+
+// Or wrap the chain
+function debugPipeline(data) {
+    let step1 = data.filter(isValid);
+    console.log('Step 1 (filter):', step1.length, 'items');
+
+    let step2 = step1.map(transform);
+    console.log('Step 2 (transform):', step2[0]);
+
+    let step3 = step2.reduce(combine, []);
+    console.log('Step 3 (reduce):', step3);
+
+    return step3;
+}
+\end{jscode}
+
+\section{Tracing Function Calls}
+
+\subsection{Wrapper for Tracing}
+
+\begin{jscode}
+function traced(name, fn) {
+    return function(...args) {
+        console.group(`${name}()`);
+        console.log('Arguments:', args);
+
+        try {
+            const result = fn.apply(this, args);
+            console.log('Result:', result);
+            console.groupEnd();
+            return result;
+        } catch (error) {
+            console.error('Error:', error.message);
+            console.groupEnd();
+            throw error;
+        }
+    };
+}
+
+// Usage
+const processUser = traced('processUser', (user) => {
+    return {
+        ...user,
+        fullName: `${user.firstName} ${user.lastName}`
+    };
+});
+
+users.map(processUser);
+// Logs each call with arguments and results
+\end{jscode}
+
+\subsection{Tracing with Timing}
+
+\begin{jscode}
+function timedTrace(name, fn) {
+    return function(...args) {
+        const start = performance.now();
+        const result = fn.apply(this, args);
+        const duration = performance.now() - start;
+
+        console.log(`${name}: ${duration.toFixed(2)}ms`, {
+            args: args.length,
+            result: typeof result
+        });
+
+        return result;
+    };
+}
+
+// Find slow operations
+const slowTransform = timedTrace('transform', transform);
+data.map(slowTransform);
+\end{jscode}
+
+\subsection{Accumulating Trace}
+
+\begin{jscode}
+function createTracer() {
+    const traces = [];
+
+    const trace = (name, fn) => (...args) => {
+        const start = performance.now();
+        const result = fn(...args);
+        const duration = performance.now() - start;
+
+        traces.push({
+            name,
+            args: args.length > 0 ? args : undefined,
+            result,
+            duration,
+            timestamp: Date.now()
+        });
+
+        return result;
+    };
+
+    const getTraces = () => [...traces];
+    const clear = () => traces.length = 0;
+
+    const summary = () => {
+        const byName = traces.reduce((acc, t) => {
+            if (!acc[t.name]) acc[t.name] = { calls: 0, totalTime: 0 };
+            acc[t.name].calls++;
+            acc[t.name].totalTime += t.duration;
+            return acc;
+        }, {});
+
+        return Object.entries(byName).map(([name, stats]) => ({
+            name,
+            calls: stats.calls,
+            totalTime: stats.totalTime.toFixed(2) + 'ms',
+            avgTime: (stats.totalTime / stats.calls).toFixed(2) + 'ms'
+        }));
+    };
+
+    return { trace, getTraces, clear, summary };
+}
+
+// Usage
+const tracer = createTracer();
+
+const tracedFilter = tracer.trace('filter', isValid);
+const tracedMap = tracer.trace('transform', transform);
+
+data.filter(tracedFilter).map(tracedMap);
+
+console.table(tracer.summary());
+\end{jscode}
+
+\section{Debugging Closures}
+
+\subsection{Inspecting Closed-Over Variables}
+
+\begin{jscode}
+// Problem: closure captures unexpected value
+function createHandlers(items) {
+    return items.map((item, index) => {
+        // What does this closure actually capture?
+        return () => console.log(item, index);
+    });
+}
+
+// Debug version: expose captured values
+function createHandlersDebug(items) {
+    return items.map((item, index) => {
+        const handler = () => console.log(item, index);
+
+        // Attach debug info
+        handler._debug = { item, index, capturedAt: new Date() };
+
+        return handler;
+    });
+}
+
+const handlers = createHandlersDebug(['a', 'b', 'c']);
+console.log(handlers[0]._debug);  // { item: 'a', index: 0, ... }
+\end{jscode}
+
+\subsection{The Closure Snapshot Pattern}
+
+\begin{jscode}
+function createCounter() {
+    let count = 0;
+
+    const counter = {
+        increment() { return ++count; },
+        decrement() { return --count; },
+        getCount() { return count; },
+
+        // Debug: snapshot internal state
+        _snapshot() {
+            return { count, timestamp: Date.now() };
+        }
+    };
+
+    return counter;
+}
+
+const c = createCounter();
+c.increment();
+c.increment();
+console.log(c._snapshot());  // { count: 2, timestamp: ... }
+\end{jscode}
+
+\subsection{Detecting Stale Closures}
+
+\begin{jscode}
+// React hook for detecting stale closures
+function useStaleClosureDetector(value, name = 'value') {
+    const renderCount = useRef(0);
+    const valueAtCapture = useRef(value);
+
+    renderCount.current++;
+
+    useEffect(() => {
+        valueAtCapture.current = value;
+    }, [value]);
+
+    return (capturedValue) => {
+        if (capturedValue !== valueAtCapture.current) {
+            console.warn(
+                `Stale closure detected for "${name}"!`,
+                `Captured: ${capturedValue}, Current: ${valueAtCapture.current}`,
+                `Render: ${renderCount.current}`
+            );
+            return true;
+        }
+        return false;
+    };
+}
+
+// Usage in component
+function MyComponent({ data }) {
+    const checkStale = useStaleClosureDetector(data, 'data');
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            checkStale(data);  // Will warn if data is stale
+            processData(data);
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);  // Missing dependency - will be stale!
+}
+\end{jscode}
+
+\section{Debugging Async HOFs}
+
+\subsection{Tracing Async Operations}
+
+\begin{jscode}
+function tracedAsync(name, asyncFn) {
+    return async function(...args) {
+        const id = Math.random().toString(36).substr(2, 9);
+        console.log(`[${id}] ${name} START`, args);
+
+        try {
+            const result = await asyncFn.apply(this, args);
+            console.log(`[${id}] ${name} SUCCESS`, result);
+            return result;
+        } catch (error) {
+            console.log(`[${id}] ${name} ERROR`, error.message);
+            throw error;
+        }
+    };
+}
+
+// Usage with Promise.all
+const fetchUser = tracedAsync('fetchUser', async (id) => {
+    const res = await fetch(`/api/users/${id}`);
+    return res.json();
+});
+
+await Promise.all([1, 2, 3].map(fetchUser));
+// Logs start/success for each with unique IDs
+\end{jscode}
+
+\subsection{Debugging Promise Chains}
+
+\begin{jscode}
+// Tap for promises
+const tapAsync = (fn) => async (value) => {
+    await fn(value);
+    return value;
+};
+
+// Usage
+const result = await fetchData()
+    .then(tapAsync(data => console.log('Fetched:', data.length)))
+    .then(transform)
+    .then(tapAsync(data => console.log('Transformed:', data)))
+    .then(save);
+\end{jscode}
+
+\subsection{Async Pipeline Debugger}
+
+\begin{jscode}
+function createAsyncPipeline(...fns) {
+    return async (input) => {
+        let value = input;
+        const steps = [];
+
+        for (let i = 0; i < fns.length; i++) {
+            const fn = fns[i];
+            const stepName = fn.name || `step${i}`;
+            const start = performance.now();
+
+            try {
+                value = await fn(value);
+                steps.push({
+                    step: stepName,
+                    success: true,
+                    duration: performance.now() - start,
+                    output: value
+                });
+            } catch (error) {
+                steps.push({
+                    step: stepName,
+                    success: false,
+                    duration: performance.now() - start,
+                    error: error.message
+                });
+
+                console.error('Pipeline failed at step:', stepName);
+                console.table(steps);
+                throw error;
+            }
+        }
+
+        console.log('Pipeline completed');
+        console.table(steps.map(s => ({
+            ...s,
+            output: typeof s.output === 'object' ? '[Object]' : s.output
+        })));
+
+        return value;
+    };
+}
+
+// Usage
+const pipeline = createAsyncPipeline(
+    fetchData,
+    validateData,
+    transformData,
+    saveData
+);
+
+await pipeline(inputData);
+\end{jscode}
+
+\section{Testing Higher-Order Functions}
+
+\subsection{Testing Function Factories}
+
+\begin{jscode}
+describe('createMultiplier', () => {
+    it('creates a function that multiplies by the given factor', () => {
+        const double = createMultiplier(2);
+        const triple = createMultiplier(3);
+
+        expect(double(5)).toBe(10);
+        expect(triple(5)).toBe(15);
+    });
+
+    it('returns different functions for different factors', () => {
+        const double = createMultiplier(2);
+        const anotherDouble = createMultiplier(2);
+
+        expect(double).not.toBe(anotherDouble);  // Different instances
+        expect(double(5)).toBe(anotherDouble(5)); // Same behavior
+    });
+
+    it('handles edge cases', () => {
+        const zero = createMultiplier(0);
+        const negative = createMultiplier(-1);
+
+        expect(zero(100)).toBe(0);
+        expect(negative(5)).toBe(-5);
+    });
+});
+\end{jscode}
+
+\subsection{Testing Closures}
+
+\begin{jscode}
+describe('createCounter', () => {
+    it('maintains independent state per instance', () => {
+        const counter1 = createCounter();
+        const counter2 = createCounter();
+
+        counter1.increment();
+        counter1.increment();
+
+        expect(counter1.getCount()).toBe(2);
+        expect(counter2.getCount()).toBe(0);  // Independent!
+    });
+
+    it('respects initial value', () => {
+        const counter = createCounter(10);
+
+        expect(counter.getCount()).toBe(10);
+        counter.increment();
+        expect(counter.getCount()).toBe(11);
+    });
+
+    it('reset returns to initial value', () => {
+        const counter = createCounter(5);
+        counter.increment();
+        counter.increment();
+        counter.reset();
+
+        expect(counter.getCount()).toBe(5);
+    });
+});
+\end{jscode}
+
+\subsection{Testing Wrapped Functions}
+
+\begin{jscode}
+describe('memoize', () => {
+    it('caches results for same arguments', () => {
+        const expensive = jest.fn(x => x * 2);
+        const memoized = memoize(expensive);
+
+        memoized(5);
+        memoized(5);
+        memoized(5);
+
+        expect(expensive).toHaveBeenCalledTimes(1);  // Only called once!
+    });
+
+    it('calls function for different arguments', () => {
+        const fn = jest.fn(x => x * 2);
+        const memoized = memoize(fn);
+
+        memoized(1);
+        memoized(2);
+        memoized(3);
+
+        expect(fn).toHaveBeenCalledTimes(3);
+    });
+
+    it('returns correct cached value', () => {
+        const fn = jest.fn(x => x * 2);
+        const memoized = memoize(fn);
+
+        const first = memoized(5);
+        const second = memoized(5);
+
+        expect(first).toBe(10);
+        expect(second).toBe(10);
+        expect(first).toBe(second);
+    });
+});
+\end{jscode}
+
+\subsection{Testing Debounce/Throttle}
+
+\begin{jscode}
+describe('debounce', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('delays execution', () => {
+        const fn = jest.fn();
+        const debounced = debounce(fn, 100);
+
+        debounced();
+        expect(fn).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(100);
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('only executes once for rapid calls', () => {
+        const fn = jest.fn();
+        const debounced = debounce(fn, 100);
+
+        debounced();
+        debounced();
+        debounced();
+
+        jest.advanceTimersByTime(100);
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses latest arguments', () => {
+        const fn = jest.fn();
+        const debounced = debounce(fn, 100);
+
+        debounced('first');
+        debounced('second');
+        debounced('third');
+
+        jest.advanceTimersByTime(100);
+        expect(fn).toHaveBeenCalledWith('third');
+    });
+});
+\end{jscode}
+
+\subsection{Testing Compose/Pipe}
+
+\begin{jscode}
+describe('pipe', () => {
+    it('applies functions left to right', () => {
+        const addOne = x => x + 1;
+        const double = x => x * 2;
+        const square = x => x * x;
+
+        const pipeline = pipe(addOne, double, square);
+
+        // 5 -> 6 -> 12 -> 144
+        expect(pipeline(5)).toBe(144);
+    });
+
+    it('handles single function', () => {
+        const double = x => x * 2;
+        const pipeline = pipe(double);
+
+        expect(pipeline(5)).toBe(10);
+    });
+
+    it('returns identity for no functions', () => {
+        const pipeline = pipe();
+
+        expect(pipeline(5)).toBe(5);
+    });
+
+    it('preserves function errors', () => {
+        const throwing = () => { throw new Error('oops'); };
+        const pipeline = pipe(x => x + 1, throwing, x => x * 2);
+
+        expect(() => pipeline(5)).toThrow('oops');
+    });
+});
+\end{jscode}
+
+\section{Testing Strategies for HOFs}
+
+\subsection{Strategy 1: Test the Factory and Product Separately}
+
+\begin{jscode}
+// Factory
+function createValidator(rules) {
+    return (value) => {
+        const errors = rules
+            .filter(rule => !rule.test(value))
+            .map(rule => rule.message);
+        return { valid: errors.length === 0, errors };
+    };
+}
+
+// Tests
+describe('createValidator', () => {
+    describe('factory behavior', () => {
+        it('returns a function', () => {
+            const validator = createValidator([]);
+            expect(typeof validator).toBe('function');
+        });
+
+        it('creates independent validators', () => {
+            const v1 = createValidator([
+                { test: x => x > 0, message: 'Must be positive' }
+            ]);
+            const v2 = createValidator([
+                { test: x => x < 0, message: 'Must be negative' }
+            ]);
+
+            expect(v1(5).valid).toBe(true);
+            expect(v2(5).valid).toBe(false);
+        });
+    });
+
+    describe('validator behavior', () => {
+        const emailValidator = createValidator([
+            { test: v => v.includes('@'), message: 'Must contain @' },
+            { test: v => v.includes('.'), message: 'Must contain .' }
+        ]);
+
+        it('returns valid for passing input', () => {
+            expect(emailValidator('test@example.com')).toEqual({
+                valid: true,
+                errors: []
+            });
+        });
+
+        it('returns all failing rules', () => {
+            expect(emailValidator('invalid')).toEqual({
+                valid: false,
+                errors: ['Must contain @', 'Must contain .']
+            });
+        });
+    });
+});
+\end{jscode}
+
+\subsection{Strategy 2: Test Composition Behavior}
+
+\begin{jscode}
+describe('middleware composition', () => {
+    it('applies middlewares in order', () => {
+        const order = [];
+
+        const m1 = (next) => (req) => {
+            order.push('m1');
+            return next(req);
+        };
+        const m2 = (next) => (req) => {
+            order.push('m2');
+            return next(req);
+        };
+        const m3 = (next) => (req) => {
+            order.push('m3');
+            return next(req);
+        };
+
+        const handler = (req) => {
+            order.push('handler');
+            return 'done';
+        };
+        const composed = compose(m1, m2, m3)(handler);
+
+        composed({});
+
+        expect(order).toEqual(['m1', 'm2', 'm3', 'handler']);
+    });
+
+    it('allows middleware to modify request', () => {
+        const addHeader = (next) => (req) => {
+            return next({
+                ...req,
+                headers: { ...req.headers, 'X-Custom': 'value' }
+            });
+        };
+
+        const handler = (req) => req.headers;
+        const composed = compose(addHeader)(handler);
+
+        expect(composed({ headers: {} })).toEqual({ 'X-Custom': 'value' });
+    });
+
+    it('allows middleware to short-circuit', () => {
+        const auth = (next) => (req) => {
+            if (!req.token) return { error: 'Unauthorized' };
+            return next(req);
+        };
+
+        const handler = jest.fn(() => 'success');
+        const composed = compose(auth)(handler);
+
+        expect(composed({})).toEqual({ error: 'Unauthorized' });
+        expect(handler).not.toHaveBeenCalled();
+    });
+});
+\end{jscode}
+
+\subsection{Strategy 3: Property-Based Testing}
+
+\begin{jscode}
+// Using fast-check for property-based testing
+import fc from 'fast-check';
+
+describe('map/filter properties', () => {
+    it('map preserves length', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer()),
+                (arr) => {
+                    const result = arr.map(x => x * 2);
+                    return result.length === arr.length;
+                }
+            )
+        );
+    });
+
+    it('filter returns subset', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer()),
+                (arr) => {
+                    const result = arr.filter(x => x > 0);
+                    return result.length <= arr.length;
+                }
+            )
+        );
+    });
+
+    it('compose is associative', () => {
+        const f = x => x + 1;
+        const g = x => x * 2;
+        const h = x => x - 3;
+
+        fc.assert(
+            fc.property(
+                fc.integer(),
+                (n) => {
+                    const left = compose(f, compose(g, h))(n);
+                    const right = compose(compose(f, g), h)(n);
+                    return left === right;
+                }
+            )
+        );
+    });
+});
+\end{jscode}
+
+\section{Common HOF Bugs and Fixes}
+
+\subsection{Bug 1: Mutating in map/filter}
+
+\begin{codebad}
+// BUG: Mutating objects in map
+const users = [{ name: 'Alice', active: false }];
+const activated = users.map(user => {
+    user.active = true;  // Mutates original!
+    return user;
+});
+\end{codebad}
+
+\begin{codegood}
+// FIX: Create new objects
+const activated = users.map(user => ({
+    ...user,
+    active: true
+}));
+\end{codegood}
+
+\subsection{Bug 2: Forgetting Return in reduce}
+
+\begin{codebad}
+// BUG: No return in reduce
+const sum = numbers.reduce((acc, n) => {
+    acc + n;  // Missing return!
+}, 0);
+// sum is undefined
+\end{codebad}
+
+\begin{codegood}
+// FIX: Return the accumulator
+const sum = numbers.reduce((acc, n) => {
+    return acc + n;
+}, 0);
+
+// Or use arrow shorthand
+const sum = numbers.reduce((acc, n) => acc + n, 0);
+\end{codegood}
+
+\subsection{Bug 3: Wrong reduce Initial Value}
+
+\begin{codebad}
+// BUG: Wrong type for initial value
+const result = items.reduce((acc, item) => {
+    acc.push(item.name);  // TypeError: acc.push is not a function
+    return acc;
+}, {});  // Should be []
+\end{codebad}
+
+\begin{codegood}
+// FIX: Match initial value to intended accumulator type
+const result = items.reduce((acc, item) => {
+    acc.push(item.name);
+    return acc;
+}, []);
+\end{codegood}
+
+\subsection{Bug 4: Async in forEach}
+
+\begin{codebad}
+// BUG: forEach doesn't wait for async
+items.forEach(async (item) => {
+    await saveItem(item);  // These run in parallel, not sequentially!
+});
+console.log('Done');  // Logs immediately, before saves complete
+\end{codebad}
+
+\begin{codegood}
+// FIX 1: Use for...of for sequential
+for (const item of items) {
+    await saveItem(item);
+}
+
+// FIX 2: Use Promise.all for parallel
+await Promise.all(items.map(item => saveItem(item)));
+\end{codegood}
+
+\subsection{Bug 5: Filter with Async Predicate}
+
+\begin{codebad}
+// BUG: filter doesn't work with async
+const valid = await items.filter(async (item) => {
+    return await isValid(item);  // Returns Promise, which is truthy!
+});
+// valid contains ALL items
+\end{codebad}
+
+\begin{codegood}
+// FIX: Use Promise.all + filter
+const validityChecks = await Promise.all(
+    items.map(async (item) => ({
+        item,
+        valid: await isValid(item)
+    }))
+);
+const valid = validityChecks
+    .filter(({ valid }) => valid)
+    .map(({ item }) => item);
+\end{codegood}
+
+\section{Debug Utilities Library}
+
+\begin{jscodewithtitle}{debug-utils.js - A collection of HOF debugging tools}
+export const debug = {
+    // Basic tap
+    tap: (fn) => (value) => {
+        fn(value);
+        return value;
+    },
+
+    // Labeled logging
+    log: (label) => (value) => {
+        console.log(label, value);
+        return value;
+    },
+
+    // Table logging for arrays
+    table: (label) => (array) => {
+        console.log(label);
+        console.table(array);
+        return array;
+    },
+
+    // Timing wrapper
+    time: (label, fn) => (...args) => {
+        console.time(label);
+        const result = fn(...args);
+        console.timeEnd(label);
+        return result;
+    },
+
+    // Async timing
+    timeAsync: (label, fn) => async (...args) => {
+        console.time(label);
+        const result = await fn(...args);
+        console.timeEnd(label);
+        return result;
+    },
+
+    // Trace calls
+    trace: (name, fn) => (...args) => {
+        console.log(`${name} called with:`, args);
+        const result = fn(...args);
+        console.log(`${name} returned:`, result);
+        return result;
+    },
+
+    // Count calls
+    count: (name, fn) => {
+        let count = 0;
+        const wrapped = (...args) => {
+            count++;
+            return fn(...args);
+        };
+        wrapped.getCount = () => count;
+        wrapped.reset = () => count = 0;
+        return wrapped;
+    },
+
+    // Assert in pipeline
+    assert: (predicate, message) => (value) => {
+        if (!predicate(value)) {
+            console.error('Assertion failed:', message, value);
+            throw new Error(`Assertion failed: ${message}`);
+        }
+        return value;
+    },
+
+    // Breakpoint (debugger statement)
+    breakpoint: (label) => (value) => {
+        console.log('Breakpoint:', label, value);
+        debugger;  // Will pause if DevTools open
+        return value;
+    },
+
+    // Snapshot for comparison
+    snapshot: (storage, key) => (value) => {
+        storage[key] = JSON.parse(JSON.stringify(value));
+        return value;
+    }
+};
+\end{jscodewithtitle}
+
+\begin{tip}
+Usage examples of the debug utilities:
+
+\begin{jscode}
+import { debug } from './debug-utils';
+
+const result = data
+    .filter(isValid)
+    .map(debug.log('after filter:'))
+    .map(transform)
+    .map(debug.assert(x => x.id != null, 'id should exist'))
+    .reduce(combine, []);
+
+// With timing
+const timedProcess = debug.time('process', process);
+const result = timedProcess(data);
+
+// Count calls
+const countedTransform = debug.count('transform', transform);
+data.map(countedTransform);
+console.log('Transform called:', countedTransform.getCount(), 'times');
+\end{jscode}
+\end{tip}
+
+\section{Chapter 16 Practice Exercises}
+
+\begin{exercise}{16.1: Debug Pipeline}
+Create a debugging wrapper that shows input/output of each step:
+
+\begin{exercisecode}
+function createDebugPipeline(...fns) {
+    // Your code here
+    // Should log before and after each function
+}
+
+// Usage
+const pipeline = createDebugPipeline(
+    x => x + 1,
+    x => x * 2,
+    x => x.toString()
+);
+
+pipeline(5);
+// Logs:
+// Step 1: input=5, output=6
+// Step 2: input=6, output=12
+// Step 3: input=12, output="12"
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{16.2: Test Suite}
+Write tests for this \func{retry} HOF:
+
+\begin{exercisecode}
+function retry(fn, maxAttempts = 3, delayMs = 1000) {
+    return async (...args) => {
+        let lastError;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return await fn(...args);
+            } catch (error) {
+                lastError = error;
+                if (attempt < maxAttempts) {
+                    await new Promise(r => setTimeout(r, delayMs));
+                }
+            }
+        }
+
+        throw lastError;
+    };
+}
+
+// Write tests covering:
+// - Successful first attempt
+// - Success after failures
+// - All attempts fail
+// - Delay between attempts
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{16.3: Closure Debugger}
+Create a utility to inspect closure state:
+
+\begin{exercisecode}
+function withClosureInspector(factory) {
+    // Your code here
+    // Should return a modified factory that exposes closure variables
+}
+
+// Usage
+const createCounterWithInspector = withClosureInspector(createCounter);
+const counter = createCounterWithInspector();
+
+counter.increment();
+counter.increment();
+
+console.log(counter._inspectClosure());
+// { count: 2 }
+\end{exercisecode}
+\end{exercise}
+
+\begin{exercise}{16.4: Performance Test}
+Create a benchmark utility for comparing HOF implementations:
+
+\begin{exercisecode}
+function benchmark(implementations, testData, iterations = 1000) {
+    // Your code here
+    // Should run each implementation and compare times
+}
+
+// Usage
+benchmark({
+    'for loop': (data) => {
+        const result = [];
+        for (let i = 0; i < data.length; i++) {
+            if (data[i] > 0) result.push(data[i] * 2);
+        }
+        return result;
+    },
+    'filter+map': (data) => data.filter(x => x > 0).map(x => x * 2),
+    'reduce': (data) => data.reduce((acc, x) =>
+        x > 0 ? [...acc, x * 2] : acc, [])
+}, testArray, 1000);
+
+// Output:
+// for loop: 15.2ms (fastest)
+// filter+map: 18.7ms (+23%)
+// reduce: 145.3ms (+856%) <- reduce with spread is slow!
+\end{exercisecode}
+\end{exercise}
+
+\section{Chapter 16 Summary}
+
+\begin{chaptersummary}
+\begin{hoftable}
+\begin{tabular}{L{0.25\textwidth}L{0.65\textwidth}}
+\toprule
+\hoftablehead{Technique & Use Case} \\
+\midrule
+tap & Inspect values without modifying pipeline \\
+traced & Log function calls with arguments/results \\
+timed & Measure function performance \\
+snapshot & Capture intermediate state for comparison \\
+assert & Validate assumptions in pipeline \\
+Mock functions & Test that callbacks are called correctly \\
+Fake timers & Test debounce/throttle behavior \\
+Property testing & Verify invariants hold for all inputs \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\begin{keyinsight}
+HOFs require visibility strategies---tap, trace, and test wrappers let you see inside the black boxes.
+\end{keyinsight}
+\end{chaptersummary}
+
+% ============================================================================
+% CHAPTER 17: Quick Reference & Decision Guides
+% ============================================================================
+\chapter{Quick Reference \& Decision Guides}
+
+A comprehensive reference for all HOF patterns covered in this guide.
+
+\section{Method Quick Reference}
+
+\subsection{Array Methods}
+
+\begin{hoftable}
+\small
+\begin{tabular}{L{0.13\textwidth}L{0.15\textwidth}L{0.13\textwidth}C{0.08\textwidth}L{0.35\textwidth}}
+\toprule
+\hoftablehead{Method & Signature & Returns & Mutates? & Use When} \\
+\midrule
+\code{map} & \code{(fn) => array} & Array (same length) & No & Transform each element \\
+\code{filter} & \code{(predicate) => array} & Array (0 to N) & No & Keep elements passing test \\
+\code{reduce} & \code{(fn, init) => any} & Single value & No & Combine into one result \\
+\code{find} & \code{(predicate) => element} & First match or undefined & No & Get first matching element \\
+\code{findIndex} & \code{(predicate) => number} & Index or -1 & No & Get position for update/delete \\
+\code{some} & \code{(predicate) => boolean} & true/false & No & Check if any element matches \\
+\code{every} & \code{(predicate) => boolean} & true/false & No & Check if all elements match \\
+\code{flatMap} & \code{(fn) => array} & Flattened array & No & Transform and flatten \\
+\code{forEach} & \code{(fn) => undefined} & undefined & No & Side effects only \\
+\code{sort} & \code{(compareFn) => array} & Sorted array & \textbf{Yes} & Sort in place \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\subsection{Early Exit Methods}
+
+\begin{hoftable}
+\begin{tabular}{L{0.2\textwidth}L{0.35\textwidth}L{0.35\textwidth}}
+\toprule
+\hoftablehead{Method & Stops When & Returns} \\
+\midrule
+\code{find} & First match & The element \\
+\code{findIndex} & First match & The index \\
+\code{some} & First true & true \\
+\code{every} & First false & false \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\section{Decision Trees}
+
+\subsection{Which Array Method?}
+
+\begin{asciibox}
+Need to...
+│
+├── Transform each element?
+│   └── Same number of outputs? → map
+│   └── Different number? → flatMap
+│
+├── Remove some elements?
+│   └── filter
+│
+├── Combine into single value?
+│   └── reduce
+│
+├── Find something?
+│   ├── First match? → find
+│   ├── Position? → findIndex
+│   ├── Does any match? → some
+│   └── Do all match? → every
+│
+├── Check existence?
+│   ├── Primitive value? → includes
+│   └── By condition? → some
+│
+└── Just iterate (side effects)?
+    └── forEach (but consider for...of)
+\end{asciibox}
+
+\subsection{Which Composition Pattern?}
+
+\begin{asciibox}
+Building a pipeline?
+│
+├── Left-to-right (data flow)? → pipe
+│   └── Data first, read naturally
+│
+├── Right-to-left (mathematical)? → compose
+│   └── f(g(x)) style
+│
+├── Object with methods? → Method chaining
+│   └── builder.setA().setB().build()
+│
+├── Middleware pattern? → Compose with next
+│   └── Each wraps the next
+│
+└── Async operations? → Async pipe
+    └── await between steps
+\end{asciibox}
+
+\subsection{Which Wrapper Pattern?}
+
+\begin{asciibox}
+Need to add behavior?
+│
+├── Cache results? → Memoize
+│   └── Pure function, expensive computation
+│
+├── Limit call frequency?
+│   ├── Wait for pause? → Debounce
+│   │   └── Search input, resize handler
+│   └── Max calls per time? → Throttle
+│       └── Scroll handler, API limits
+│
+├── Ensure single execution? → Once
+│   └── Initialization, connection setup
+│
+├── Add logging/timing? → Traced
+│   └── Debug, monitoring
+│
+├── Add error handling? → WithErrorHandler
+│   └── Fallbacks, logging
+│
+└── Add retries? → Retry
+    └── Network requests, transient failures
+\end{asciibox}
+
+\section{Pattern Quick Reference}
+
+\subsection{Factory Pattern}
+
+\begin{jscode}
+function createX(config) {
+    // Private state via closure
+    let state = initialState;
+
+    // Return public interface
+    return {
+        method() { /* uses config and state */ }
+    };
+}
+
+const instance = createX({ option: value });
+\end{jscode}
+
+\subsection{Memoization}
+
+\begin{jscode}
+function memoize(fn) {
+    const cache = new Map();
+    return (...args) => {
+        const key = JSON.stringify(args);
+        if (!cache.has(key)) {
+            cache.set(key, fn(...args));
+        }
+        return cache.get(key);
+    };
+}
+\end{jscode}
+
+\subsection{Debounce}
+
+\begin{jscode}
+function debounce(fn, ms) {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn(...args), ms);
+    };
+}
+\end{jscode}
+
+\subsection{Throttle}
+
+\begin{jscode}
+function throttle(fn, ms) {
+    let lastCall = 0;
+    return (...args) => {
+        const now = Date.now();
+        if (now - lastCall >= ms) {
+            lastCall = now;
+            return fn(...args);
+        }
+    };
+}
+\end{jscode}
+
+\subsection{Pipe}
+
+\begin{jscode}
+const pipe = (...fns) => (x) => fns.reduce((v, f) => f(v), x);
+\end{jscode}
+
+\subsection{Compose}
+
+\begin{jscode}
+const compose = (...fns) => (x) => fns.reduceRight((v, f) => f(v), x);
+\end{jscode}
+
+\subsection{Curry}
+
+\begin{jscode}
+const curry = (fn) => {
+    const arity = fn.length;
+    return function curried(...args) {
+        if (args.length >= arity) return fn(...args);
+        return (...more) => curried(...args, ...more);
+    };
+};
+\end{jscode}
+
+\subsection{Partial Application}
+
+\begin{jscode}
+const partial = (fn, ...preset) => (...later) => fn(...preset, ...later);
+\end{jscode}
+
+\section{Common Transformations}
+
+\subsection{Array to Object (by key)}
+
+\begin{jscode}
+const byId = users.reduce((acc, user) => {
+    acc[user.id] = user;
+    return acc;
+}, {});
+
+// ES2019+
+const byId = Object.fromEntries(users.map(u => [u.id, u]));
+\end{jscode}
+
+\subsection{Group By}
+
+\begin{jscode}
+const grouped = items.reduce((acc, item) => {
+    const key = item.category;
+    (acc[key] = acc[key] || []).push(item);
+    return acc;
+}, {});
+
+// ES2024+
+const grouped = Object.groupBy(items, item => item.category);
+\end{jscode}
+
+\subsection{Count Occurrences}
+
+\begin{jscode}
+const counts = items.reduce((acc, item) => {
+    acc[item] = (acc[item] || 0) + 1;
+    return acc;
+}, {});
+\end{jscode}
+
+\subsection{Unique Values}
+
+\begin{jscode}
+const unique = [...new Set(array)];
+
+// By property
+const uniqueByName = [...new Map(users.map(u => [u.name, u])).values()];
+\end{jscode}
+
+\subsection{Flatten}
+
+\begin{jscode}
+// One level
+const flat = arrays.flat();
+
+// Deep
+const deepFlat = arrays.flat(Infinity);
+
+// With transform
+const flatMapped = arrays.flatMap(arr => arr.map(transform));
+\end{jscode}
+
+\subsection{Partition}
+
+\begin{jscode}
+const partition = (arr, predicate) =>
+    arr.reduce(([pass, fail], item) =>
+        predicate(item) ? [[...pass, item], fail] : [pass, [...fail, item]],
+    [[], []]);
+
+const [evens, odds] = partition(numbers, n => n % 2 === 0);
+\end{jscode}
+
+\subsection{Zip}
+
+\begin{jscode}
+const zip = (a, b) => a.map((item, i) => [item, b[i]]);
+
+const zipped = zip([1, 2, 3], ['a', 'b', 'c']);
+// [[1, 'a'], [2, 'b'], [3, 'c']]
+\end{jscode}
+
+\subsection{Chunk}
+
+\begin{jscode}
+const chunk = (arr, size) =>
+    arr.reduce((acc, _, i) =>
+        i % size === 0 ? [...acc, arr.slice(i, i + size)] : acc,
+    []);
+
+chunk([1, 2, 3, 4, 5], 2);  // [[1, 2], [3, 4], [5]]
+\end{jscode}
+
+\section{Performance Quick Guide}
+
+\begin{hoftable}
+\begin{tabular}{L{0.3\textwidth}L{0.6\textwidth}}
+\toprule
+\hoftablehead{Scenario & Recommendation} \\
+\midrule
+< 1,000 items & Use HOFs freely \\
+1,000 - 10,000 items & HOFs OK, profile if slow \\
+10,000 - 100,000 items & Consider single reduce or lazy \\
+> 100,000 items & Use lazy evaluation or loops \\
+Hot path (1000s calls/sec) & Benchmark, consider loops \\
+Infinite/streaming data & Use generators/iterators \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\subsection{Optimization Checklist}
+
+\begin{comparison}
+\begin{minipage}[t]{0.48\textwidth}
+\textbf{\color{dangerborder}SLOW}
+\begin{jscode}
+// 1. Combine filters
+data.filter(a).filter(b).filter(c)
+
+// 2. Filter before map
+data.map(transform).filter(predicate)
+
+// 3. Use early-exit methods
+data.filter(predicate).length > 0
+data.filter(predicate)[0]
+
+// 4. Avoid reduce with spread O(n²)
+items.reduce((acc, item) =>
+    ({...acc, [item.id]: item}), {})
+\end{jscode}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\textbf{\color{hofaccent}FAST}
+\begin{jscode}
+// 1. Single filter
+data.filter(x => a(x) && b(x) && c(x))
+
+// 2. Filter first
+data.filter(predicate).map(transform)
+
+// 3. Use early-exit methods
+data.some(predicate)
+data.find(predicate)
+
+// 4. Mutate accumulator O(n)
+items.reduce((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+}, {})
+\end{jscode}
+\end{minipage}
+\end{comparison}
+
+\section{Functional Error Handling}
+
+\subsection{Either Pattern}
+
+\begin{jscode}
+const Right = (value) => ({
+    map: (fn) => Right(fn(value)),
+    flatMap: (fn) => fn(value),
+    fold: (onLeft, onRight) => onRight(value),
+    isRight: true
+});
+
+const Left = (error) => ({
+    map: (fn) => Left(error),
+    flatMap: (fn) => Left(error),
+    fold: (onLeft, onRight) => onLeft(error),
+    isLeft: true
+});
+
+// Usage
+const divide = (a, b) => b === 0
+    ? Left('Division by zero')
+    : Right(a / b);
+
+divide(10, 2)
+    .map(x => x * 2)
+    .fold(
+        err => console.error(err),
+        result => console.log(result)  // 10
+    );
+\end{jscode}
+
+\subsection{Maybe Pattern}
+
+\begin{jscode}
+const Maybe = {
+    Just: (value) => ({
+        map: (fn) => Maybe.Just(fn(value)),
+        getOrElse: () => value,
+        isJust: true
+    }),
+    Nothing: () => ({
+        map: () => Maybe.Nothing(),
+        getOrElse: (defaultValue) => defaultValue,
+        isNothing: true
+    }),
+    fromNullable: (value) =>
+        value == null ? Maybe.Nothing() : Maybe.Just(value)
+};
+
+// Safe property access
+const getCity = (user) =>
+    Maybe.fromNullable(user)
+        .map(u => u.address)
+        .map(a => a.city)
+        .getOrElse('Unknown');
+\end{jscode}
+
+\section{Lens Quick Reference}
+
+\begin{jscode}
+// Create lens
+const lens = (getter, setter) => ({
+    get: getter,
+    set: setter,
+    over: (fn) => (obj) => setter(fn(getter(obj)), obj)
+});
+
+// Property lens
+const prop = (key) => lens(
+    (obj) => obj[key],
+    (value, obj) => ({ ...obj, [key]: value })
+);
+
+// Usage
+const nameLens = prop('name');
+nameLens.get({ name: 'Alice' });  // 'Alice'
+nameLens.set('Bob', { name: 'Alice' });  // { name: 'Bob' }
+nameLens.over(s => s.toUpperCase())({ name: 'Alice' });  // { name: 'ALICE' }
+
+// Compose lenses
+const addressLens = prop('address');
+const cityLens = prop('city');
+const userCityLens = {
+    get: (user) => cityLens.get(addressLens.get(user)),
+    set: (city, user) => addressLens.set(
+        cityLens.set(city, addressLens.get(user)),
+        user
+    )
+};
+\end{jscode}
+
+\section{Async Patterns}
+
+\subsection{Sequential Processing}
+
+\begin{jscode}
+// Process one at a time
+async function processSequentially(items, asyncFn) {
+    const results = [];
+    for (const item of items) {
+        results.push(await asyncFn(item));
+    }
+    return results;
+}
+
+// Or with reduce
+const processSequentially = (items, asyncFn) =>
+    items.reduce(async (accPromise, item) => {
+        const acc = await accPromise;
+        const result = await asyncFn(item);
+        return [...acc, result];
+    }, Promise.resolve([]));
+\end{jscode}
+
+\subsection{Parallel Processing}
+
+\begin{jscode}
+// All at once
+const results = await Promise.all(items.map(asyncFn));
+
+// With concurrency limit
+async function parallelLimit(items, asyncFn, limit) {
+    const results = [];
+    const executing = [];
+
+    for (const item of items) {
+        const p = asyncFn(item).then(result => {
+            executing.splice(executing.indexOf(p), 1);
+            return result;
+        });
+
+        results.push(p);
+        executing.push(p);
+
+        if (executing.length >= limit) {
+            await Promise.race(executing);
+        }
+    }
+
+    return Promise.all(results);
+}
+\end{jscode}
+
+\subsection{Async Pipe}
+
+\begin{jscode}
+const pipeAsync = (...fns) => (input) =>
+    fns.reduce((chain, fn) => chain.then(fn), Promise.resolve(input));
+
+// Usage
+const result = await pipeAsync(
+    fetchUser,
+    validateUser,
+    saveUser
+)(userId);
+\end{jscode}
+
+\section{React HOF Patterns}
+
+\subsection{Higher-Order Components (HOC)}
+
+\begin{jscode}
+function withAuth(Component) {
+    return function AuthenticatedComponent(props) {
+        const { user, loading } = useAuth();
+
+        if (loading) return <Spinner />;
+        if (!user) return <Redirect to="/login" />;
+
+        return <Component {...props} user={user} />;
+    };
+}
+
+const ProtectedPage = withAuth(DashboardPage);
+\end{jscode}
+
+\subsection{Custom Hooks with HOFs}
+
+\begin{jscode}
+function useMemoizedCallback(fn, deps) {
+    const memoized = useMemo(() => memoize(fn), deps);
+    return memoized;
+}
+
+function useDebounce(value, delay) {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedValue(value), delay);
+        return () => clearTimeout(timer);
+    }, [value, delay]);
+
+    return debouncedValue;
+}
+
+function useThrottledCallback(callback, delay, deps) {
+    const throttled = useMemo(() => throttle(callback, delay), deps);
+
+    useEffect(() => {
+        return () => throttled.cancel?.();
+    }, [throttled]);
+
+    return throttled;
+}
+\end{jscode}
+
+\subsection{Event Handler Factories}
+
+\begin{jscode}
+// Factory for field handlers
+const useFormHandlers = (setForm) => ({
+    handleChange: (field) => (e) => {
+        setForm(prev => ({ ...prev, [field]: e.target.value }));
+    },
+    handleToggle: (field) => () => {
+        setForm(prev => ({ ...prev, [field]: !prev[field] }));
+    },
+    handleReset: (field, defaultValue) => () => {
+        setForm(prev => ({ ...prev, [field]: defaultValue }));
+    }
+});
+
+// Usage
+const handlers = useFormHandlers(setFormData);
+<input onChange={handlers.handleChange('email')} />
+<input type="checkbox" onChange={handlers.handleToggle('subscribe')} />
+\end{jscode}
+
+\section{Common Mistakes Quick Reference}
+
+\begin{hoftable}
+\small
+\begin{tabular}{L{0.2\textwidth}L{0.35\textwidth}L{0.35\textwidth}}
+\toprule
+\hoftablehead{Mistake & Problem & Fix} \\
+\midrule
+Mutating in map/filter & Modifies original data & Spread/clone objects \\
+No return in reduce & Returns undefined & Always return accumulator \\
+Wrong reduce initial & Type mismatch & Match initial to intended type \\
+async in forEach & Doesn't wait & Use for...of or Promise.all \\
+async filter predicate & Always truthy & Promise.all then filter \\
+Spread in reduce loop & O(n²) performance & Mutate accumulator in reduce \\
+Missing dependency in useCallback & Stale closure & Include all dependencies \\
+var in loop closures & All share same value & Use let or IIFE \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\section{Library Quick Reference}
+
+\begin{hoftable}
+\begin{tabular}{L{0.2\textwidth}L{0.3\textwidth}L{0.4\textwidth}}
+\toprule
+\hoftablehead{Library & Primary Use & Key Features} \\
+\midrule
+\textbf{Ramda} & FP utilities & Data-last, curried, immutable \\
+\textbf{Lodash/fp} & FP utilities & Data-last, curried version of Lodash \\
+\textbf{RxJS} & Reactive streams & Observables, operators, async \\
+\textbf{Effect-TS} & Effect system & Typed effects, error handling, DI \\
+\textbf{Immer} & Immutable updates & Mutable-style API, structural sharing \\
+\textbf{Sanctuary} & Type-safe FP & Stricter types, Maybe/Either \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\section{ES2025+ Features}
+
+\subsection{Iterator Helpers (Lazy)}
+
+\begin{jscode}
+// Lazy array operations
+Iterator.from([1, 2, 3, 4, 5])
+    .filter(n => n % 2 === 0)
+    .map(n => n * 2)
+    .take(2)
+    .toArray();  // [4, 8]
+\end{jscode}
+
+\subsection{Array.fromAsync}
+
+\begin{jscode}
+// Collect async iterator to array
+const results = await Array.fromAsync(asyncGenerator());
+\end{jscode}
+
+\subsection{Set Methods}
+
+\begin{jscode}
+// Set theory operations
+setA.intersection(setB);
+setA.union(setB);
+setA.difference(setB);
+setA.symmetricDifference(setB);
+\end{jscode}
+
+\subsection{Object.groupBy}
+
+\begin{jscode}
+// Native grouping
+const grouped = Object.groupBy(items, item => item.category);
+\end{jscode}
+
+\section{Chapter 17 Summary}
+
+\begin{chaptersummary}
+This reference provides quick access to:
+
+\begin{hoftable}
+\begin{tabular}{L{0.15\textwidth}L{0.75\textwidth}}
+\toprule
+\hoftablehead{Section & Contents} \\
+\midrule
+17.1 & Array method signatures and behaviors \\
+17.2 & Decision trees for choosing methods \\
+17.3 & Pattern implementations (factory, memoize, etc.) \\
+17.4 & Common data transformations \\
+17.5 & Performance guidelines \\
+17.6 & Functional error handling \\
+17.7 & Lens operations \\
+17.8 & Async patterns \\
+17.9 & React HOF patterns \\
+17.10 & Common mistakes \\
+17.11 & Library comparison \\
+17.12 & Modern JavaScript features \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+\end{chaptersummary}
+
+% ============================================================================
+% PART V SUMMARY
+% ============================================================================
+\chapter*{Part V Summary: Mastery Achieved}
+\addcontentsline{toc}{chapter}{Part V Summary: Mastery Achieved}
+
+You now have the tools for complete HOF mastery:
+
+\begin{hoftable}
+\begin{tabular}{L{0.2\textwidth}L{0.7\textwidth}}
+\toprule
+\hoftablehead{Topic & Key Takeaways} \\
+\midrule
+Debugging & tap, trace, timing, snapshots \\
+Testing & Mock functions, fake timers, property tests \\
+Quick Reference & Method signatures, decision trees \\
+Patterns & Factory, memoize, debounce, throttle, pipe \\
+Performance & When to optimize, how to measure \\
+Error Handling & Either, Maybe, Result patterns \\
+Modern JS & Iterator helpers, async patterns \\
+\bottomrule
+\end{tabular}
+\end{hoftable}
+
+\section*{Final Practice Project: Build Your Own Utility Library}
+\addcontentsline{toc}{section}{Final Practice Project}
+
+\begin{practiceproject}{Build Your Own Utility Library}
+Create a complete utility library that includes:
+
+\begin{jscodewithtitle}{fp-utils.js}
+// Core composition
+export const pipe = (...fns) => (x) => fns.reduce((v, f) => f(v), x);
+export const compose = (...fns) => (x) => fns.reduceRight((v, f) => f(v), x);
+
+// Currying and partial application
+export const curry = (fn) => { /* implementation */ };
+export const partial = (fn, ...args) => { /* implementation */ };
+
+// Function modifiers
+export const memoize = (fn) => { /* implementation */ };
+export const debounce = (fn, ms) => { /* implementation */ };
+export const throttle = (fn, ms) => { /* implementation */ };
+export const once = (fn) => { /* implementation */ };
+export const retry = (fn, attempts, delay) => { /* implementation */ };
+
+// Array utilities
+export const groupBy = (arr, keyFn) => { /* implementation */ };
+export const partition = (arr, predicate) => { /* implementation */ };
+export const chunk = (arr, size) => { /* implementation */ };
+export const unique = (arr) => { /* implementation */ };
+export const zip = (...arrays) => { /* implementation */ };
+
+// Object utilities
+export const pick = (obj, keys) => { /* implementation */ };
+export const omit = (obj, keys) => { /* implementation */ };
+export const mapValues = (obj, fn) => { /* implementation */ };
+export const mapKeys = (obj, fn) => { /* implementation */ };
+
+// Functional types
+export const Maybe = { /* implementation */ };
+export const Either = { /* implementation */ };
+export const Result = { /* implementation */ };
+
+// Lens utilities
+export const lens = (getter, setter) => { /* implementation */ };
+export const prop = (key) => { /* implementation */ };
+export const path = (...keys) => { /* implementation */ };
+
+// Debug utilities
+export const tap = (fn) => (x) => { fn(x); return x; };
+export const trace = (label) => tap(x => console.log(label, x));
+
+// Async utilities
+export const pipeAsync = (...fns) => { /* implementation */ };
+export const parallel = (fns) => { /* implementation */ };
+export const sequential = (fns) => { /* implementation */ };
+
+// Validation
+export const createValidator = (rules) => { /* implementation */ };
+\end{jscodewithtitle}
+
+\textbf{Implementation Requirements:}
+\begin{itemize}
+    \item Implement each function using the patterns learned throughout this guide
+    \item Write comprehensive tests for each function
+    \item Document with JSDoc or TypeScript types
+    \item Include usage examples for each utility
+    \item Add performance benchmarks where appropriate
+\end{itemize}
+\end{practiceproject}
+
+\section*{Conclusion}
+
+You've completed a comprehensive journey through higher-order functions in JavaScript:
+
+\begin{keyinsight}
+\textbf{Part I: Foundations}
+\begin{itemize}
+    \item First-class functions and HOF basics
+    \item The core three: map, filter, reduce
+    \item Beyond basics: find, some, every, flatMap
+\end{itemize}
+
+\textbf{Part II: Patterns \& Techniques}
+\begin{itemize}
+    \item Function factories and closures
+    \item Composition and pipelines
+    \item Currying and partial application
+    \item Converting imperative to functional
+\end{itemize}
+
+\textbf{Part III: Real-World Web Development}
+\begin{itemize}
+    \item DOM and events
+    \item React patterns
+    \item State management
+    \item API and async operations
+\end{itemize}
+
+\textbf{Part IV: Advanced Patterns}
+\begin{itemize}
+    \item Performance optimization
+    \item Functional error handling
+    \item Lenses and optics
+    \item Metaprogramming with Proxies
+\end{itemize}
+
+\textbf{Part V: Mastery \& Reference}
+\begin{itemize}
+    \item Debugging strategies
+    \item Testing techniques
+    \item Quick reference guides
+\end{itemize}
+\end{keyinsight}
+
+\begin{note}
+\textbf{Remember}: The goal isn't to use HOFs everywhere, but to recognize when they make code clearer, more reusable, and more maintainable. Start simple, compose gradually, and always prioritize readability.
+
+\vspace{1em}
+Happy coding!
+\end{note}
+
+%% ============================================================================
+%% BACKMATTER
+%% ============================================================================
+\backmatter
+
+\printindex
+
+\end{document}

@@ -1,0 +1,521 @@
+%% hofcode.sty
+%% Code highlighting and display package for HOF book
+%% Uses minted for syntax highlighting with custom styling
+%%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{hofcode}[2024/01/01 HOF Book Code Styling]
+
+%% ============================================================================
+%% REQUIRED PACKAGES
+%% ============================================================================
+\RequirePackage{minted}
+\RequirePackage{tcolorbox}
+\tcbuselibrary{minted,skins,breakable}
+\RequirePackage{fvextra}
+\RequirePackage{xcolor}
+
+%% ============================================================================
+%% MINTED GLOBAL CONFIGURATION
+%% ============================================================================
+\setminted{
+    fontsize=\small,
+    breaklines=true,
+    breakanywhere=false,
+    breakautoindent=true,
+    breaksymbolleft={\scriptsize\color{codecomment}\(\hookrightarrow\)},
+    breaksymbolright={},
+    breakindent=1em,
+    tabsize=4,
+    obeytabs=false,
+    autogobble=true,
+    linenos=false,
+    numbersep=8pt,
+    stripnl=true,
+    stripall=false
+}
+
+%% JavaScript specific settings
+\setminted[javascript]{
+    style=one-dark
+}
+
+%% ============================================================================
+%% CUSTOM MINTED STYLE (One Dark Theme)
+%% ============================================================================
+% Note: For best results, use pygmentize with 'one-dark' style
+% If not available, the following colors provide a similar appearance
+
+%% ============================================================================
+%% CODE BOX ENVIRONMENTS
+%% ============================================================================
+
+%% --- Main JavaScript Code Block ---
+\newtcblisting{jscode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% --- JavaScript with line numbers ---
+\newtcblisting{jscodenumbered}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=true,
+        numbersep=10pt,
+        #1
+    },
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    left=2pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% --- Code with title ---
+\newtcblisting{jscodewithtitle}[2][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    title={\small\sffamily\bfseries\color{white}#2},
+    coltitle=white,
+    colbacktitle=hofprimary,
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    toptitle=4pt,
+    bottomtitle=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% --- Comparison: Before/After Code Blocks ---
+\newtcolorbox{codecompare}[1][]{%
+    enhanced,
+    colback=white,
+    colframe=gray!30,
+    arc=4pt,
+    boxrule=1pt,
+    breakable,
+    before skip=1em,
+    after skip=1em,
+    #1
+}
+
+%% --- GOOD code example ---
+\newtcblisting{codegood}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    title={\small\sffamily\bfseries\color{white}\checkmark\ Good},
+    coltitle=white,
+    colbacktitle=hofaccent,
+    colback=codebg,
+    colframe=hofaccent!50!black,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0.5pt,
+    toptitle=4pt,
+    bottomtitle=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=0.5em,
+    after skip=0.5em
+}
+
+%% --- BAD code example ---
+\newtcblisting{codebad}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    title={\small\sffamily\bfseries\color{white}\texttimes\ Bad},
+    coltitle=white,
+    colbacktitle=dangerborder,
+    colback=codebg,
+    colframe=dangerborder!50!black,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0.5pt,
+    toptitle=4pt,
+    bottomtitle=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=0.5em,
+    after skip=0.5em
+}
+
+%% --- Terminal/Console Output ---
+\newtcblisting{terminal}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=text,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        #1
+    },
+    title={\small\sffamily\bfseries\color{white}Terminal},
+    coltitle=white,
+    colbacktitle=black!80,
+    colback=black!90,
+    coltext=green!70!white,
+    colframe=black,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    toptitle=4pt,
+    bottomtitle=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% --- Inline code block (for small snippets) ---
+\newtcbox{\inlinecode}{
+    on line,
+    arc=2pt,
+    outer arc=2pt,
+    colback=gray!15,
+    colframe=gray!15,
+    boxrule=0pt,
+    boxsep=0pt,
+    left=3pt,
+    right=3pt,
+    top=1pt,
+    bottom=1pt,
+    fontupper=\small\ttfamily
+}
+
+%% ============================================================================
+%% CODE ANNOTATION COMMANDS
+%% ============================================================================
+
+% Highlighted line marker (use in code comments)
+\newcommand{\hlline}[1]{\colorbox{yellow!30}{#1}}
+
+% Arrow annotation
+\newcommand{\codearrow}{\textcolor{hofprimary}{\(\leftarrow\)}}
+
+% Code comment highlight
+\newcommand{\codecommenthl}[1]{{\color{hofaccent}\(\triangleright\) #1}}
+
+%% ============================================================================
+%% REPL-STYLE OUTPUT
+%% ============================================================================
+\newtcblisting{repl}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        #1
+    },
+    colback=codebg,
+    colframe=hofsecondary,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em,
+    overlay={
+        \node[anchor=north east, inner sep=4pt, font=\scriptsize\sffamily\bfseries, text=hofsecondary]
+            at (frame.north east) {REPL};
+    }
+}
+
+%% ============================================================================
+%% MULTI-LANGUAGE SUPPORT
+%% ============================================================================
+
+%% TypeScript
+\newtcblisting{tscode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=typescript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% JSON
+\newtcblisting{jsoncode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=json,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% HTML
+\newtcblisting{htmlcode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=html,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% Shell/Bash
+\newtcblisting{shellcode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=bash,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    colback=codebg,
+    colframe=codebg,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% ============================================================================
+%% PSEUDOCODE ENVIRONMENT
+%% ============================================================================
+\newtcblisting{pseudocode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=text,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        #1
+    },
+    title={\small\sffamily\bfseries Algorithm},
+    coltitle=black,
+    colbacktitle=gray!20,
+    colback=gray!5,
+    colframe=gray!50,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=0.5pt,
+    toptitle=4pt,
+    bottomtitle=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+%% ============================================================================
+%% CODE FRAGMENT (for inline multi-line code)
+%% ============================================================================
+\newenvironment{codefragment}{%
+    \begin{tcolorbox}[
+        enhanced,
+        colback=codebg,
+        colframe=codebg,
+        arc=4pt,
+        boxrule=0pt,
+        left=8pt,
+        right=8pt,
+        top=4pt,
+        bottom=4pt,
+        before skip=0.5em,
+        after skip=0.5em
+    ]
+    \color{codefg}\ttfamily\small
+}{%
+    \end{tcolorbox}
+}
+
+%% ============================================================================
+%% EXERCISE CODE BLOCK
+%% ============================================================================
+\newtcblisting{exercisecode}[1][]{%
+    enhanced,
+    listing engine=minted,
+    listing only,
+    minted language=javascript,
+    minted style=one-dark,
+    minted options={
+        fontsize=\small,
+        breaklines=true,
+        autogobble=true,
+        linenos=false,
+        #1
+    },
+    title={\small\sffamily\bfseries\color{white}Exercise},
+    coltitle=white,
+    colbacktitle=hofsecondary,
+    colback=codebg,
+    colframe=hofsecondary,
+    arc=4pt,
+    outer arc=4pt,
+    boxrule=1pt,
+    toptitle=4pt,
+    bottomtitle=4pt,
+    left=8pt,
+    right=8pt,
+    top=8pt,
+    bottom=8pt,
+    breakable,
+    before skip=1em,
+    after skip=1em
+}
+
+\endinput
