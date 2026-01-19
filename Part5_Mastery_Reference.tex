@@ -1,40 +1,7 @@
 %% Part5_Mastery_Reference.tex
 %% Part V: Mastery & Reference
-%% Higher-Order Functions in JavaScript
-%% Compile with: lualatex --shell-escape Part5_Mastery_Reference.tex
+%% Included from main.tex
 %%
-\documentclass{hofbook}
-
-%% Load custom packages
-\usepackage{hofcode}
-\usepackage{hofvisual}
-
-%% ============================================================================
-%% DOCUMENT METADATA
-%% ============================================================================
-\title{Higher-Order Functions in JavaScript}
-\booksubtitle{Part V: Mastery \& Reference}
-\author{Your Name}
-\date{\today}
-\bookversion{1.0}
-
-%% ============================================================================
-%% BEGIN DOCUMENT
-%% ============================================================================
-\begin{document}
-
-%% --- Title Page ---
-\maketitle
-
-%% --- Table of Contents ---
-\frontmatter
-\tableofcontents
-
-%% ============================================================================
-%% MAIN CONTENT
-%% ============================================================================
-\mainmatter
-
 \partdivider{V}{Mastery \& Reference}
 
 % ============================================================================
@@ -1011,8 +978,10 @@ export const debug = {
 \end{jscodewithtitle}
 
 \begin{tip}
-Usage examples of the debug utilities:
+These debug utilities can be inserted into any pipeline without changing the data flow---they're transparent wrappers that log and return the original value.
+\end{tip}
 
+\textbf{Usage Examples:}
 \begin{jscode}
 import { debug } from './debug-utils';
 
@@ -1032,7 +1001,6 @@ const countedTransform = debug.count('transform', transform);
 data.map(countedTransform);
 console.log('Transform called:', countedTransform.getCount(), 'times');
 \end{jscode}
-\end{tip}
 
 \section{Chapter 16 Practice Exercises}
 
@@ -1145,10 +1113,10 @@ benchmark({
 \section{Chapter 16 Summary}
 
 \begin{chaptersummary}
-\begin{hoftable}
+\begin{hoftable*}
 \begin{tabular}{L{0.25\textwidth}L{0.65\textwidth}}
 \toprule
-\hoftablehead{Technique & Use Case} \\
+\hoftablehead{Technique} & \hoftablehead{Use Case} \\
 \midrule
 tap & Inspect values without modifying pipeline \\
 traced & Log function calls with arguments/results \\
@@ -1160,7 +1128,7 @@ Fake timers & Test debounce/throttle behavior \\
 Property testing & Verify invariants hold for all inputs \\
 \bottomrule
 \end{tabular}
-\end{hoftable}
+\end{hoftable*}
 
 \begin{keyinsight}
 HOFs require visibility strategies---tap, trace, and test wrappers let you see inside the black boxes.
@@ -1182,7 +1150,7 @@ A comprehensive reference for all HOF patterns covered in this guide.
 \small
 \begin{tabular}{L{0.13\textwidth}L{0.15\textwidth}L{0.13\textwidth}C{0.08\textwidth}L{0.35\textwidth}}
 \toprule
-\hoftablehead{Method & Signature & Returns & Mutates? & Use When} \\
+\hoftablehead{Method} & \hoftablehead{Signature} & \hoftablehead{Returns} & \hoftablehead{Mutates?} & \hoftablehead{Use When} \\
 \midrule
 \code{map} & \code{(fn) => array} & Array (same length) & No & Transform each element \\
 \code{filter} & \code{(predicate) => array} & Array (0 to N) & No & Keep elements passing test \\
@@ -1203,7 +1171,7 @@ A comprehensive reference for all HOF patterns covered in this guide.
 \begin{hoftable}
 \begin{tabular}{L{0.2\textwidth}L{0.35\textwidth}L{0.35\textwidth}}
 \toprule
-\hoftablehead{Method & Stops When & Returns} \\
+\hoftablehead{Method} & \hoftablehead{Stops When} & \hoftablehead{Returns} \\
 \midrule
 \code{find} & First match & The element \\
 \code{findIndex} & First match & The index \\
@@ -1476,7 +1444,7 @@ chunk([1, 2, 3, 4, 5], 2);  // [[1, 2], [3, 4], [5]]
 \begin{hoftable}
 \begin{tabular}{L{0.3\textwidth}L{0.6\textwidth}}
 \toprule
-\hoftablehead{Scenario & Recommendation} \\
+\hoftablehead{Scenario} & \hoftablehead{Recommendation} \\
 \midrule
 < 1,000 items & Use HOFs freely \\
 1,000 - 10,000 items & HOFs OK, profile if slow \\
@@ -1767,7 +1735,7 @@ const handlers = useFormHandlers(setFormData);
 \small
 \begin{tabular}{L{0.2\textwidth}L{0.35\textwidth}L{0.35\textwidth}}
 \toprule
-\hoftablehead{Mistake & Problem & Fix} \\
+\hoftablehead{Mistake} & \hoftablehead{Problem} & \hoftablehead{Fix} \\
 \midrule
 Mutating in map/filter & Modifies original data & Spread/clone objects \\
 No return in reduce & Returns undefined & Always return accumulator \\
@@ -1786,7 +1754,7 @@ var in loop closures & All share same value & Use let or IIFE \\
 \begin{hoftable}
 \begin{tabular}{L{0.2\textwidth}L{0.3\textwidth}L{0.4\textwidth}}
 \toprule
-\hoftablehead{Library & Primary Use & Key Features} \\
+\hoftablehead{Library} & \hoftablehead{Primary Use} & \hoftablehead{Key Features} \\
 \midrule
 \textbf{Ramda} & FP utilities & Data-last, curried, immutable \\
 \textbf{Lodash/fp} & FP utilities & Data-last, curried version of Lodash \\
@@ -1840,10 +1808,10 @@ const grouped = Object.groupBy(items, item => item.category);
 \begin{chaptersummary}
 This reference provides quick access to:
 
-\begin{hoftable}
+\begin{hoftable*}
 \begin{tabular}{L{0.15\textwidth}L{0.75\textwidth}}
 \toprule
-\hoftablehead{Section & Contents} \\
+\hoftablehead{Section} & \hoftablehead{Contents} \\
 \midrule
 17.1 & Array method signatures and behaviors \\
 17.2 & Decision trees for choosing methods \\
@@ -1859,7 +1827,7 @@ This reference provides quick access to:
 17.12 & Modern JavaScript features \\
 \bottomrule
 \end{tabular}
-\end{hoftable}
+\end{hoftable*}
 \end{chaptersummary}
 
 % ============================================================================
@@ -1873,7 +1841,7 @@ You now have the tools for complete HOF mastery:
 \begin{hoftable}
 \begin{tabular}{L{0.2\textwidth}L{0.7\textwidth}}
 \toprule
-\hoftablehead{Topic & Key Takeaways} \\
+\hoftablehead{Topic} & \hoftablehead{Key Takeaways} \\
 \midrule
 Debugging & tap, trace, timing, snapshots \\
 Testing & Mock functions, fake timers, property tests \\
@@ -1890,7 +1858,16 @@ Modern JS & Iterator helpers, async patterns \\
 \addcontentsline{toc}{section}{Final Practice Project}
 
 \begin{practiceproject}{Build Your Own Utility Library}
-Create a complete utility library that includes:
+Create a complete utility library using all the patterns from this guide. Your library should include: composition functions (\code{pipe}, \code{compose}), currying utilities, function modifiers (memoize, debounce, throttle), array utilities (groupBy, partition, chunk), object utilities, functional types (Maybe, Either, Result), lens utilities, and async helpers.
+
+\textbf{Implementation Requirements:}
+\begin{itemize}
+    \item Implement each function using the patterns learned throughout this guide
+    \item Write comprehensive tests for each function
+    \item Document with JSDoc or TypeScript types
+    \item Include usage examples for each utility
+\end{itemize}
+\end{practiceproject}
 
 \begin{jscodewithtitle}{fp-utils.js}
 // Core composition
@@ -1944,16 +1921,6 @@ export const sequential = (fns) => { /* implementation */ };
 export const createValidator = (rules) => { /* implementation */ };
 \end{jscodewithtitle}
 
-\textbf{Implementation Requirements:}
-\begin{itemize}
-    \item Implement each function using the patterns learned throughout this guide
-    \item Write comprehensive tests for each function
-    \item Document with JSDoc or TypeScript types
-    \item Include usage examples for each utility
-    \item Add performance benchmarks where appropriate
-\end{itemize}
-\end{practiceproject}
-
 \section*{Conclusion}
 
 You've completed a comprehensive journey through higher-order functions in JavaScript:
@@ -2004,12 +1971,3 @@ You've completed a comprehensive journey through higher-order functions in JavaS
 \vspace{1em}
 Happy coding!
 \end{note}
-
-%% ============================================================================
-%% BACKMATTER
-%% ============================================================================
-\backmatter
-
-\printindex
-
-\end{document}

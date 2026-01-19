@@ -1,39 +1,7 @@
-%% part3_real_world.tex
+%% Part3_Real_World.tex
 %% Part III: Real-World Web Development
-%% Compile with: lualatex --shell-escape main.tex (when included in main document)
+%% Included from main.tex
 %%
-\documentclass{hofbook}
-
-%% Load custom packages
-\usepackage{hofcode}
-\usepackage{hofvisual}
-
-%% ============================================================================
-%% DOCUMENT METADATA
-%% ============================================================================
-\title{Higher-Order Functions in JavaScript}
-\booksubtitle{Part III: Real-World Web Development}
-\author{Your Name}
-\date{\today}
-\bookversion{1.0}
-
-%% ============================================================================
-%% BEGIN DOCUMENT
-%% ============================================================================
-\begin{document}
-
-%% --- Title Page ---
-\maketitle
-
-%% --- Table of Contents ---
-\frontmatter
-\tableofcontents
-
-%% ============================================================================
-%% PART III: REAL-WORLD WEB DEVELOPMENT
-%% ============================================================================
-\mainmatter
-
 \partdivider{III}{Real-World Web Development}
 
 \chapter{HOFs in Async JavaScript}
@@ -213,7 +181,7 @@ const results = await items.reduce(async (accPromise, item) => {
 \centering
 \begin{tabular}{p{0.25\textwidth} p{0.65\textwidth}}
 \toprule
-\hoftablehead{Pattern & Use When} \\
+\hoftablehead{Pattern} & \hoftablehead{Use When} \\
 \midrule
 Parallel (\code{Promise.all}) & Independent operations, maximize speed \\
 Sequential (\code{for...of}) & Order matters, rate limiting, dependencies \\
@@ -1013,18 +981,18 @@ function ProductList({ products, filterText }) {
 \subsection{useMemo vs useCallback}
 
 \begin{definition}{useMemo vs useCallback}
+\code{useMemo} memoizes the \textbf{result} of calling the function.
+\code{useCallback} memoizes the \textbf{function itself}.
+These are equivalent: \code{useCallback(fn, deps)} and \code{useMemo(() => fn, deps)}.
+\end{definition}
+
 \begin{jscode}
 // useMemo: memoizes the RESULT of calling the function
 const memoizedValue = useMemo(() => computeValue(a, b), [a, b]);
 
 // useCallback: memoizes the FUNCTION ITSELF
 const memoizedFn = useCallback(() => computeValue(a, b), [a, b]);
-
-// These are equivalent:
-useCallback(fn, deps)
-useMemo(() => fn, deps)
 \end{jscode}
-\end{definition}
 
 \subsection{When to Use useMemo}
 
@@ -1560,8 +1528,10 @@ dispatch({ type: 'RESET' });  // Returns to initial state
 Middleware signature is a triple-nested HOF:
 
 \begin{definition}{Middleware Pattern}
+The signature \code{store => next => action => result} creates a triple-nested HOF that can intercept, modify, or delay actions.
+\end{definition}
+
 \begin{jscode}
-// store => next => action => result
 const middleware = store => next => action => {
     // Do something before
     const result = next(action);
@@ -1569,7 +1539,6 @@ const middleware = store => next => action => {
     return result;
 };
 \end{jscode}
-\end{definition}
 
 \subsection{Logger Middleware}
 
@@ -2098,7 +2067,7 @@ You now have practical patterns for:
 \centering
 \begin{tabular}{p{0.2\textwidth} p{0.7\textwidth}}
 \toprule
-\hoftablehead{Domain & Patterns Learned} \\
+\hoftablehead{Domain} & \hoftablehead{Patterns Learned} \\
 \midrule
 Async JS & Parallel/sequential execution, retry, debounce, throttle, cancellation \\
 React & Hooks, memoization, custom hooks, HOCs, render props \\
@@ -2172,12 +2141,3 @@ Focus on:
 \item Memoization where appropriate
 \end{itemize}
 \end{practiceproject}
-
-%% ============================================================================
-%% BACKMATTER
-%% ============================================================================
-\backmatter
-
-\printindex
-
-\end{document}

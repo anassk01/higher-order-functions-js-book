@@ -10,13 +10,15 @@
 %% ============================================================================
 \LoadClass[11pt,a4paper,openany]{book}
 
+
 %% ============================================================================
 %% REQUIRED PACKAGES
 %% ============================================================================
 
 % Encoding and fonts (LuaLaTeX)
 \RequirePackage{fontspec}
-\RequirePackage{unicode-math}
+% Note: unicode-math removed due to incompatibility with tcolorbox in LuaLaTeX/TeX Live 2025
+% \RequirePackage{unicode-math}
 
 % Page layout
 \RequirePackage[
@@ -67,9 +69,30 @@
 % Captions
 \RequirePackage{caption}
 
+% Workaround for tcolorbox 6.9.0 / TeX Live 2025 tagging compatibility
+% Provide stub implementations for tagging commands before loading tcolorbox
+\ExplSyntaxOn
+% Provide stub for tag_suspend:n if not defined
+\cs_if_exist:NF \tag_suspend:n
+{
+  \cs_new_protected:Npn \tag_suspend:n #1 {}
+}
+% Provide stub for tag_resume:n if not defined
+\cs_if_exist:NF \tag_resume:n
+{
+  \cs_new_protected:Npn \tag_resume:n #1 {}
+}
+\ExplSyntaxOff
+
 % For boxes and environments
 \RequirePackage{tcolorbox}
 \tcbuselibrary{skins,breakable,listings}
+
+% Workaround: Define missing tcolorbox internal commands for TeX Live 2025 tagging
+% These must be defined AFTER tcolorbox loads (no makeatletter needed in class file)
+\providecommand{\tcb@insert@after@upper}{}
+\providecommand{\tcb@insert@after@lower}{}
+\providecommand{\tcb@insert@after@part}{}
 
 % TikZ for advanced graphics
 \RequirePackage{tikz}
@@ -280,7 +303,7 @@
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
 \newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
 
-% Styled table environment
+% Styled table environment (float)
 \newenvironment{hoftable}[1][htbp]{%
     \begin{table}[#1]
     \centering
@@ -290,10 +313,16 @@
     \end{table}
 }
 
-% Styled tabular header
+% Non-floating styled table (for use inside tcolorbox/summary environments)
+\newenvironment{hoftable*}{%
+    \centering
+    \rowcolors{2}{tablestripe}{white}
+    \renewcommand{\arraystretch}{1.4}
+}{}
+
+% Styled tabular header (use \cellcolor instead of \rowcolor for multi-column support)
 \newcommand{\hoftablehead}[1]{%
-    \rowcolor{tableheader}
-    \textbf{\sffamily #1}
+    \cellcolor{tableheader}\textbf{\sffamily #1}
 }
 
 %% ============================================================================

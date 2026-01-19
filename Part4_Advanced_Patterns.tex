@@ -1,39 +1,7 @@
 %% Part4_Advanced_Patterns.tex
 %% Part IV: Advanced Patterns
-%% Compile with: lualatex --shell-escape Part4_Advanced_Patterns.tex
+%% Included from main.tex
 %%
-\documentclass{hofbook}
-
-%% Load custom packages
-\usepackage{hofcode}
-\usepackage{hofvisual}
-
-%% ============================================================================
-%% DOCUMENT METADATA
-%% ============================================================================
-\title{Higher-Order Functions in JavaScript}
-\booksubtitle{Part IV: Advanced Patterns}
-\author{Your Name}
-\date{\today}
-\bookversion{1.0}
-
-%% ============================================================================
-%% BEGIN DOCUMENT
-%% ============================================================================
-\begin{document}
-
-%% --- Title Page ---
-\maketitle
-
-%% --- Table of Contents ---
-\frontmatter
-\tableofcontents
-
-%% ============================================================================
-%% MAIN CONTENT
-%% ============================================================================
-\mainmatter
-
 \partdivider{IV}{Advanced Patterns}
 
 % ============================================================================
@@ -418,6 +386,9 @@ class Lazy {
 \end{jscodewithtitle}
 
 \begin{examplebox}{Lazy Evaluation in Action}
+Using the \code{Lazy} class, we can chain operations on an infinite sequence and only compute the values we need.
+\end{examplebox}
+
 \begin{jscode}
 const result = Lazy.infinite()
     .filter(n => n % 2 === 0)
@@ -428,7 +399,6 @@ const result = Lazy.infinite()
 console.log(result);
 // [0, 4, 16, 36, 64, 100, 144, 196, 256, 324]
 \end{jscode}
-\end{examplebox}
 
 \section{Iterator Helpers (ES2025)}
 
@@ -888,6 +858,9 @@ const validateUser = (data) =>
 \end{jscodewithtitle}
 
 \begin{examplebox}{Railway in Action}
+Valid data flows through all checks and returns \code{Right}. Invalid data short-circuits at the first error and returns \code{Left}.
+\end{examplebox}
+
 \begin{jscode}
 validateUser({
     email: 'test@example.com',
@@ -900,7 +873,6 @@ validateUser({ email: 'invalid', password: 'short', age: 16 });
 // Left({ field: 'email', message: 'Invalid email' })
 // Stops at first error
 \end{jscode}
-\end{examplebox}
 
 \section{Collecting All Errors}
 
@@ -1043,6 +1015,9 @@ const Result = {
 \end{jscodewithtitle}
 
 \begin{examplebox}{Result Type in Action}
+The Result type lets us chain operations on fallible computations and handle errors elegantly with pattern matching.
+\end{examplebox}
+
 \begin{jscode}
 const parseJSON = Result.fromThrowable(JSON.parse);
 
@@ -1054,7 +1029,6 @@ parseJSON('{"name": "Alice"}')
         err: error => console.error(`Parse error: ${error.message}`)
     });
 \end{jscode}
-\end{examplebox}
 
 \section{Async Either (TaskEither)}
 
@@ -1098,6 +1072,9 @@ const TaskEither = {
 \end{jscodewithtitle}
 
 \begin{examplebox}{Async Error Handling}
+TaskEither combines the power of Either with async/await, letting us chain async operations with clean error handling.
+\end{examplebox}
+
 \begin{jscode}
 const fetchUser = (id) => TaskEither.tryCatch(
     () => fetch(`/api/users/${id}`).then(r => r.json())
@@ -1111,7 +1088,6 @@ const result = await fetchUser(123)
         name => `Hello, ${name}!`
     );
 \end{jscode}
-\end{examplebox}
 
 \section{Practice Exercises}
 
@@ -1643,6 +1619,9 @@ function deepObservable(target, onChange, path = []) {
 \end{jscodewithtitle}
 
 \begin{examplebox}{Deep Observable in Action}
+Deep observables track changes at any depth, providing the full path to the changed property.
+\end{examplebox}
+
 \begin{jscode}
 const state = deepObservable({
     user: { profile: { name: 'Alice' } }
@@ -1653,7 +1632,6 @@ const state = deepObservable({
 state.user.profile.name = 'Bob';
 // "user.profile.name: Alice -> Bob"
 \end{jscode}
-\end{examplebox}
 
 \section{Validation Proxy}
 
@@ -1704,6 +1682,9 @@ const and = (...validators) => (value) => {
 \end{jscodewithtitle}
 
 \begin{examplebox}{Validated Object Usage}
+The validation proxy automatically validates every property assignment against its schema.
+\end{examplebox}
+
 \begin{jscode}
 const user = validated({}, {
     name: and(isType('string'), (v) => ({
@@ -1718,7 +1699,6 @@ user.name = 'Alice';  // OK
 user.age = 30;        // OK
 user.age = -5;        // Throws: "Invalid value for age: Must be between 0 and 150"
 \end{jscode}
-\end{examplebox}
 
 \section{Lazy Initialization}
 
@@ -1936,6 +1916,9 @@ function intercept(target, interceptors) {
 \end{jscodewithtitle}
 
 \begin{examplebox}{Method Interception Example}
+AOP-style interception allows adding cross-cutting concerns (logging, timing, caching) without modifying original methods.
+\end{examplebox}
+
 \begin{jscode}
 const service = {
     fetchData(id) {
@@ -1957,7 +1940,6 @@ const interceptedService = intercept(service, {
     }
 });
 \end{jscode}
-\end{examplebox}
 
 \section{Virtual Properties}
 
@@ -2152,7 +2134,6 @@ Build a reactive state management system combining all Part IV concepts:
 
 \begin{practiceproject}{Reactive State System}
 Create a comprehensive state management system with:
-
 \begin{steps}
     \item \textbf{Immutable state with lens-based updates} -- Use lenses for declarative state modifications
     \item \textbf{Observable changes (Proxy-based)} -- Track all state mutations automatically
@@ -2160,7 +2141,9 @@ Create a comprehensive state management system with:
     \item \textbf{Validation on updates (Either-based)} -- Ensure state integrity with functional validation
     \item \textbf{Efficient selectors} -- Use transducers for large collection processing
 \end{steps}
+\end{practiceproject}
 
+\textbf{Example API:}
 \begin{jscode}
 const store = createReactiveStore({
     initialState: {
@@ -2200,13 +2183,3 @@ store.computed.filteredUsers;
 // Validate on update
 store.lens('settings.pageSize').set(200);  // Throws validation error
 \end{jscode}
-\end{practiceproject}
-
-%% ============================================================================
-%% BACKMATTER
-%% ============================================================================
-\backmatter
-
-\printindex
-
-\end{document}
